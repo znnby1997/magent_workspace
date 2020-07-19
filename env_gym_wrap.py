@@ -28,70 +28,38 @@ def obs_info_extract(views, features, group_id, max_agent, debug=False, have_env
     """
     self_infos, opp_infos, partner_infos = [], [], []
     env_info = views[0, :, :, 0].flatten() # 环境信息
-    if group_id == 0: # group1
-        # 提取自身观测信息向量
-        for view, feature in zip(views, features):
-            self_view_vector = view[6][6] # 13*13观测视角中, 自身观测在中间位置
-            self_view_info = np.stack([self_view_vector[2], 0, self_view_vector[3]]) # 血量、group、minimap
-            self_info = np.append(feature, self_view_info)
-            self_infos.append(self_info)
+    # 提取自身观测信息向量
+    for view, feature in zip(views, features):
+        self_view_vector = view[6][6] # 13*13观测视角中, 自身观测在中间位置
+        self_view_info = np.stack([self_view_vector[2], group_id, self_view_vector[3]]) # 血量、group、minimap
+        self_info = np.append(feature, self_view_info)
+        self_infos.append(self_info)
 
-        # 提取对手以及队友观测信息向量
-        for view in views:
-            opp_info = np.zeros((max_agent, 2 + view.shape[0] * 2))
-            partner_info = np.zeros((max_agent - 1, 2 + view.shape[0] * 2))
-            opp_index = 0
-            partner_index = 0
-            for row in range(view.shape[0]):
-                for col in range(view.shape[1]):
-                    if row != 6 and col != 6 and view[row][col][1] == 1:
-                        # 队友
-                        partner_info[partner_index][0] = view[row][col][2] # 血量
-                        partner_info[partner_index][1] = 0 # 所在group
-                        partner_info[partner_index][2 + row] = 1 # x
-                        partner_info[partner_index][2 + view.shape[0] + col] = 1 # y
-                        partner_index += 1
-                    elif row != 6 and col != 6 and view[row][col][4] == 1:
-                        # 对手
-                        opp_info[opp_index][0] = view[row][col][5]
-                        opp_info[opp_index][1] = 1
-                        opp_info[opp_index][2 + row] = 1
-                        opp_info[opp_index][2 + view.shape[0] + col] = 1
-                        opp_index += 1
-            opp_infos.append(opp_info.flatten())
-            partner_infos.append(partner_info.flatten())
-    else: # group2
-        for view, feature in zip(views, features):
-            self_view_vector = view[6][6] # 13*13观测视角中, 自身观测在中间位置
-            self_view_info = np.stack([self_view_vector[5], 1, self_view_vector[6]]) # 血量、group、minimap
-            self_info = np.append(feature, self_view_info)
-            self_infos.append(self_info)
-
-        for view in views:
-            opp_info = np.zeros((max_agent, 2 + view.shape[0] * 2))
-            partner_info = np.zeros((max_agent - 1, 2 + view.shape[0] * 2))
-            opp_index = 0
-            partner_index = 0
-            for row in range(view.shape[0]):
-                for col in range(view.shape[1]):
-                    if row != 6 and col != 6 and view[row][col][1] == 1:
-                        # 对手
-                        opp_info[opp_index][0] = view[row][col][2] # 血量
-                        opp_info[opp_index][1] = 0 # 所在group
-                        opp_info[opp_index][2 + row] = 1 # x
-                        opp_info[opp_index][2 + view.shape[0] + col] = 1 # y
-                        opp_index += 1
-                    elif row != 6 and col != 6 and view[row][col][4] == 1:
-                        # 队友
-                        print(partner_index)
-                        partner_info[partner_index][0] = view[row][col][5]
-                        partner_info[partner_index][1] = 1
-                        partner_info[partner_index][2 + row] = 1
-                        partner_info[partner_index][2 + view.shape[0] + col] = 1
-                        partner_index += 1
-            opp_infos.append(opp_info.flatten())
-            partner_infos.append(partner_info.flatten())
-
+    # 提取对手以及队友观测信息向量
+    for view in views:
+        opp_info = np.zeros((max_agent, 2 + view.shape[0] * 2))
+        partner_info = np.zeros((max_agent - 1, 2 + view.shape[0] * 2))
+        opp_index = 0
+        partner_index = 0
+        for row in range(view.shape[0]):
+            for col in range(view.shape[1]):
+                if row != 6 and col != 6 and view[row][col][1] == 1:
+                    # 队友
+                    partner_info[partner_index][0] = view[row][col][2] # 血量
+                    partner_info[partner_index][1] = group_id
+                    partner_info[partner_index][2 + row] = 1 # x
+                    partner_info[partner_index][2 + view.shape[0] + col] = 1 # y
+                    partner_index += 1
+                elif row != 6 and col != 6 and view[row][col][4] == 1:
+                    # 对手
+                    opp_info[opp_index][0] = view[row][col][5]
+                    opp_info[opp_index][1] = 1 - group_id
+                    opp_info[opp_index][2 + row] = 1
+                    opp_info[opp_index][2 + view.shape[0] + col] = 1
+                    opp_index += 1
+        opp_infos.append(opp_info.flatten())
+        partner_infos.append(partner_info.flatten())
+    
     # 整合
     self_infos = np.vstack(self_infos)
     opp_infos = np.vstack(opp_infos)
@@ -110,7 +78,7 @@ obs_input = obs_info_extract
 
 
 class MagentEnv:
-    def __init__(self, agent_num=20, map_size=14, id_set=[0, 1], shift_delta=0, max_step=100, have_env_info=False, opp_policy_random=True):
+    def __init__(self, agent_num=20, map_size=15, id_set=[0, 1], shift_delta=0, max_step=100, have_env_info=False, opp_policy_random=True):
         self.agent_num = agent_num
 
         magent.utility.init_logger('battle')
@@ -129,9 +97,15 @@ class MagentEnv:
 
         # i取值((map_size - 1)/2 - 5, (map_size - 1)/2)
         # (4-5, 4+5)
-        self.left_side_config = [[i - shift_delta, j - shift_delta] for j in range(1, 8) for i in range(1, 4)]
-        self.right_side_config = [[i - shift_delta, j - shift_delta] for j in range(12, 5, -1) for i in range(12, 9, -1)]
-
+        # # 20vs20 15*15map
+        if agent_num == 20 and map_size == 15:
+            self.left_side_config = [[i - shift_delta, j - shift_delta] for j in range(1, 8) for i in range(1, 4)]
+            self.right_side_config = [[i - shift_delta, j - shift_delta] for j in range(13, 6, -1) for i in range(13, 10, -1)]
+        elif agent_num == 10 and map_size == 10:
+            # 10vs10 10*10map
+            self.left_side_config = [[i - shift_delta, j - shift_delta] for j in range(1, 5) for i in range(1, 4)]
+            self.right_side_config = [[i - shift_delta, j - shift_delta] for j in range(8, 4, -1) for i in range(8, 5, -1)]
+    
         self.done = False
         self.reward_range = (-np.inf, np.inf)
         self.metadata = {}
@@ -181,20 +155,18 @@ class MagentEnv:
 
         return reward
 
-    def reset(self, agent_num=20, use_random_init=False):
+    def reset(self, use_random_init=False):
         # print('reset!!!!!')
         # print(len(self.env.get_alive(self.handles[0])), len(self.env.get_alive(self.handles[1])))
 
         self.done = False
 
         if use_random_init:
-            random_pos_set = np.array(list(itertools.product(range(2, self.map_size-2), range(2, self.map_size-2))))[np.random.choice(range((self.map_size-4)**2), 2 * agent_num, replace=False)]
-            pos_set = [random_pos_set[:agent_num], random_pos_set[agent_num:]]
+            random_pos_set = np.array(list(itertools.product(range(2, self.map_size-2), range(2, self.map_size-2))))[np.random.choice(range((self.map_size-4)**2), 2 * self.agent_num, replace=False)]
+            pos_set = [random_pos_set[:self.agent_num], random_pos_set[self.agent_num:]]
         else:
-            pos_set = [self.left_side_config[:agent_num],
-                       self.right_side_config[:agent_num]]
-
-        self.agent_num = agent_num
+            pos_set = [self.left_side_config[:self.agent_num],
+                       self.right_side_config[:self.agent_num]]
 
         generate_map(self.env, self.id_set, pos_set, self.handles)
 
@@ -277,3 +249,5 @@ if __name__ == '__main__':
     # print('group2 obs: ', obs[1])
     # for i in range(len(obs[0])):
     #     print(obs[0][i])
+    # obs, reward, done, alive_info = env.step(env.action_space.sample())
+    # print(alive_info)

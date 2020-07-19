@@ -23,6 +23,7 @@ class QNet(nn.Module):
 
         # agent level attention
         self.al_att_layer = nn.Linear(obs_dim, agent_num * 2)
+        self.att_output_encoder = nn.Linear(em_dim, hidden_dim)
 
         # scale dot attention
         self.self_encoder = nn.Linear(37, em_dim)
@@ -60,17 +61,17 @@ class QNet(nn.Module):
         elif self.structure_type == 4:
             # agent level attention
             # self info: 37bits  opp info: 28bits  partner info: 28bits
-            self.att_weight = f.softmax(self.al_att_layer(x))
+            self.att_weight = f.softmax(self.al_att_layer(x)) # size: [batch, agent_num]
             self_info = x[:, 0:37]
             other_info = x[:, 37:]
             agents_info = other_info.split(28, dim=1)
-            weights = self.att_weight.split(1, dim=1)
-            att_list = []
-            att_list.append(self_info * weights[0])
-            for agent_info, weight in zip(agents_info, weights[1:]):
-                att_list.append(agent_info * weight)
-            att_output = torch.cat(att_list, dim=1)
-            return f.relu(self.trans_layer(att_output))
+            encodings = []
+            encodings.append(self.self_encoder(self_info))
+            for agent_info in agents_info:
+                encodings.append(f.relu(self.other_encoder(agent_info)))
+            encodings = torch.stack(encodings).permute(1, 0, 2) # size: [batch, agent_num, embedding_dim]
+            att_output = torch.bmm(self.att_weight.unsqueeze(1), encodings).squeeze(1) # size: [batch, em_dim]
+            return f.relu(self.att_output_encoder(att_output))
         elif self.structure_type == 5:
             # scale dot attention
             self_info = x[:, 0:37]
