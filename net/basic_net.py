@@ -9,6 +9,7 @@ class QNet(nn.Module):
         self.structure_type = structure_type  # net_type_flag
         self.att_weight = None
         self.hidden_dim = hidden_dim
+        self.agent_num = agent_num
 
         # embedding and out layer
         self.embedding_layer = nn.Linear(hidden_dim, hidden_dim)
@@ -37,7 +38,13 @@ class QNet(nn.Module):
         # gru attention
         self.gru_layer = nn.GRU(input_size=em_dim, hidden_size=hidden_dim // 2, bidirectional=True)
         self.w = nn.Parameter(torch.Tensor(hidden_dim, hidden_dim))
-        self.fix_query = nn.Parameter(torch.Tensor(hidden_dim, 1))    
+        self.fix_query = nn.Parameter(torch.Tensor(hidden_dim, 1))
+
+        # DyAN网络聚合方式
+        self.feature_encoder1 = nn.Linear(28, hidden_dim)
+        self.feature_encoder2 = nn.Linear(hidden_dim, hidden_dim)
+        self.self_encoder = nn.Linear(37, hidden_dim)
+        self.align_embedding = nn.Linear(3 * hidden_dim, hidden_dim)
 
     def get_attention_layer(self, x):
         if self.structure_type == 0:
@@ -61,7 +68,7 @@ class QNet(nn.Module):
         elif self.structure_type == 4:
             # agent level attention
             # self info: 37bits  opp info: 28bits  partner info: 28bits
-            self.att_weight = f.softmax(self.al_att_layer(x)) # size: [batch, agent_num]
+            self.att_weight = f.softmax(self.al_att_layer(x), dim=1) # size: [batch, agent_num]
             self_info = x[:, 0:37]
             other_info = x[:, 37:]
             agents_info = other_info.split(28, dim=1)
@@ -112,7 +119,26 @@ class QNet(nn.Module):
             scored_x = x * self.att_weight # size: [batch, agent_num, hidden]
             att_output = torch.sum(scored_x, dim=1) # size: [batch, hidden]
             return att_output
-            
+        elif self.structure_type == 8:
+            # DyAN聚合方式, 所有的对手观测聚合, 所有的队友观测聚合, 最后拼接三个信息
+            self_info = x[:, 0:37]
+            opp_index = 37 + 28 * self.agent_num
+            opps_info = x[:, 37:opp_index].split(28, dim=1) # 20 agents
+            partners_info = x[:, opp_index:].split(28, dim=1) # 19 agents
+            opps_encoder = []
+            partners_encoder = []
+            for opp_info in opps_info:
+                opps_encoder.append(self.feature_encoder2(f.relu(self.feature_encoder1(opp_info))))
+            for partner_info in partners_info:
+                partners_encoder.append(self.feature_encoder2(f.relu(self.feature_encoder1(partner_info))))
+            opps_embedding = torch.stack(opps_encoder) # size: [agent_num, batch, hidden]
+            partners_embedding = torch.stack(partners_encoder) # size: [agent_num, batch, hidden]
+            aggregate_opp = torch.max(opps_embedding, dim=0)[0] # size: [batch, hidden] sum/mean/max
+            aggregate_partner = torch.max(partners_embedding, dim=0)[0] # size: [batch, hidden]
+            self_embedding = f.relu(self.feature_encoder2(f.relu(self.self_encoder(self_info)))) # size: [batch, hidden]
+            embedding = torch.cat([aggregate_opp, aggregate_partner, self_embedding], dim=1) # size: [batch, 3 * hidden]
+            att_output = f.relu(self.align_embedding(embedding)) # size: [batch, hidden]
+            return att_output
     def forward(self):
         raise NotImplementedError
 
@@ -123,3 +149,36 @@ class QNet(nn.Module):
 
     def get_cur_weight(self):
         return self.att_weight.detach().numpy()
+
+
+class BasicNet(nn.Module):
+    def __init__(self, obs_dim, n_actions, hidden_dim=32, em_dim=32, **kwargs):
+        super(BasicNet, self).__init__()
+        self.obs_dim = obs_dim
+        self.n_actions = n_actions
+        self.hidden_dim = hidden_dim
+        self.em_dim = em_dim
+        self.att_weight = None
+
+        # 基本的网络中包含一层MLP，用于处理第一层的输出embedding
+        self.basic_mlp2 = nn.Linear(self.hidden_dim, self.n_actions)
+
+        # 编码观测信息向量的时候用
+        # self info: 37bits  opp info: 28bits  partner info: 28bits
+        self.self_encoder = nn.Linear(37, em_dim)
+        self.other_encoder = nn.Linear(28, em_dim)
+
+    def forward(self):
+        raise NotImplementedError
+
+    def att_layer(self, x):
+        # 该部分每个网络继承basic net时需要重写
+        return
+
+    def q(self, obs):
+        att_output = self.att_layer(obs)
+        return self.basic_mlp2(att_output)
+
+    def get_cur_weight(self):
+        return self.att_weight.detach().numpy()
+

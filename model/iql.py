@@ -8,18 +8,32 @@ sys.path.append('..')
 
 
 from utils.experience_memory import ExperienceMemory, Dynamics, PrioritisedBuffer
-from net.basic_net import QNet
+# from net.basic_net import QNet
+from net.alw_att_net import AlwAttNet
+from net.dot_scale_att_net import DotScaleAttNet
+from net.dyan import Dyan
+from net.gru_dot_scale_att import GruDSANet
+from net.gru_weight import GruGenAttNet
+from net.none_net import NoneNet
+from net.nonlin_att_net import NonlinAttNet
 
 import time
 import random
 
+net_dict = {
+    'alw': AlwAttNet, 'dot_scale': DotScaleAttNet, 'dyan': Dyan, 'gruds': GruDSANet,
+    'gruga': GruGenAttNet, 'none': NoneNet, 'nonlinatt': NonlinAttNet
+}
+
 class IQL(object):
-    def __init__(self, obs_dim, n_actions, net, agent_num, gamma=0.98, batch_size=5000,
-                capacity=100000, lr=1e-4, hidden_dim=32, prioritised_replay=False, target_net=False):
+    def __init__(self, obs_dim, n_actions, net, agent_num, gamma=0.98, batch_size=5000, 
+                capacity=100000, lr=1e-4, hidden_dim=32, prioritised_replay=False, target_net=False,
+                use_cuda=False):
         self.gamma = gamma
         self.batch_size = batch_size
         self.target_net = target_net
         self.prioritised_replay = prioritised_replay
+        self.use_cuda = use_cuda
 
         if self.prioritised_replay:
             print('Add prioritised_replay')
@@ -29,11 +43,15 @@ class IQL(object):
 
         self.n_actions = n_actions
         
-        self.q_net = QNet(obs_dim, n_actions, agent_num=agent_num, hidden_dim=hidden_dim, structure_type=net)
+        self.q_net = net_dict[net](obs_dim, n_actions, agent_num=agent_num, hidden_dim=hidden_dim)
         if self.target_net:
             print('Add double dqn')
-            self.target_q_net = QNet(obs_dim, n_actions, agent_num=agent_num, hidden_dim=hidden_dim, structure_type=net)
+            self.target_q_net = net_dict[net](obs_dim, n_actions, agent_num=agent_num, hidden_dim=hidden_dim)
             self.update_target()
+        
+        if self.use_cuda:
+            self.q_net = self.q_net.cuda()
+            self.target_q_net = self.target_q_net.cuda()
 
         self.optimizer = optim.Adam(self.q_net.parameters(), lr=lr)
 
@@ -43,6 +61,9 @@ class IQL(object):
     def infer_action(self, joint_obs, epsilon=1.0, greedy=False):
         actions = []
         joint_obs = torch.tensor(joint_obs, dtype=torch.float)
+        if self.use_cuda:
+            joint_obs = joint_obs.cuda()
+
         for obs in joint_obs:
             if random.uniform(0, 1) >= epsilon or greedy:
                 q = self.q_net.q(obs.reshape(1, -1))
@@ -71,6 +92,15 @@ class IQL(object):
         next_obs = torch.tensor(data.next_state, dtype=torch.float)
         done = torch.tensor(data.is_end, dtype=torch.float).reshape(-1, 1)
         weights = torch.tensor(weights, dtype=torch.float).reshape(-1, 1)
+
+        if self.use_cuda:
+            obs = obs.cuda()
+            action = action.cuda()
+            reward = reward.cuda()
+            next_obs = next_obs.cuda()
+            done = done.cuda()
+            weights = weights.cuda()
+
         return obs, action, reward, next_obs, done, indices, weights
 
     def learn(self):
@@ -99,7 +129,7 @@ class IQL(object):
             prios = loss + 1e-5
             self.optimizer.zero_grad()
             loss.mean().backward()
-            self.pool.update_priorities(indices, prios.data.numpy())
+            self.pool.update_priorities(indices, prios.data.cpu().numpy())
             self.optimizer.step()
         else:
             loss = f.smooth_l1_loss(input=qa_values, target=q_target.detach())
@@ -110,17 +140,13 @@ class IQL(object):
     def get_cur_weight(self, joint_obs):
         att_weight_list = []
         joint_obs = torch.tensor(joint_obs, dtype=torch.float)
+        if self.use_cuda:
+            joint_obs = joint_obs.cuda()
+
         for obs in joint_obs:
             q = self.q_net.q(obs.reshape(1, -1))
             att_weight_list.append(self.q_net.get_cur_weight())
         return att_weight_list
-
-    @staticmethod
-    def discount_reward(reward_list, gamma):
-        discount_r = 0
-        for i in range(len(reward_list)):
-            discount_r += (reward_list[i] * (gamma**(i)))
-        return discount_r
 
 
     

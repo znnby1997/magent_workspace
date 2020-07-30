@@ -83,7 +83,7 @@ class MagentEnv:
 
         magent.utility.init_logger('battle')
         self.env = magent.GridWorld("battle", map_size=map_size)
-        self.env.set_render_dir("render/render_" + time.strftime('%Y%m%d%H%M%S', time.localtime()))
+        self.env.set_render_dir("../../data/render/render_" + time.strftime('%Y%m%d%H%M%S', time.localtime()))
         self.handles = self.env.get_handles()
 
         self.map_size = map_size

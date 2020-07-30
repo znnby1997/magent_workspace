@@ -8,45 +8,51 @@ import torch
 import random
 
 from model.iql import IQL
-from model.rainbow import Rainbow
 from env_gym_wrap import MagentEnv
 from magent.builtin.rule_model import RandomActor
 import utils.data_process as dp
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 
-agent_num = 20
-map_size = 15
-max_step = 200
-net_structure_types = {
-    'none': 0, 'softmax': 1, 'tanh': 2, 
-    'sigmoid': 3, 'alw': 4, 'transformer': 5, 'fix_attention': 6, 'gru_attention': 7,
-    'dyan': 8}
-update_model_rate = 100
-print_info_rate = 20
-use_cuda = torch.cuda.is_available()
+# agent_num = 20
+# map_size = 15
+# max_step = 200
+# net_structure_types = {
+#     'none': 0, 'softmax': 1, 'tanh': 2, 
+#     'sigmoid': 3, 'alw': 4, 'transformer': 5, 'fix_attention': 6, 'gru_attention': 7,
+#     'dyan': 8}
 
-env = MagentEnv(agent_num=agent_num, map_size=map_size, max_step=max_step, opp_policy_random=False)
+"""
+    net_dict = {
+    'alw': AlwAttNet, 'dot_scale': DotScaleAttNet, 'dyan': Dyan, 'gruds': GruDSANet,
+    'gruga': GruGenAttNet, 'none', NoneNet, 'nonlinatt': NonlinAttNet
+}
+"""
+# update_model_rate = 100
+# print_info_rate = 20
+# use_cuda = torch.cuda.is_available()
+
+env = MagentEnv(agent_num=20, map_size=15, max_step=200, opp_policy_random=True)
 
 # 用于训练一个对手模型，自身对手为随机动作
-def train_opp_policy(env: MagentEnv, net_type, prioritised_replay=True, model_name='iql',
-        episode_num=1000, epsilon=1.0, step_epsilon=0.01,
-        final_epsilon=0.01, save_data=False, csv_url=None, seed_flag=1, update_net=True):
+def train_opp_policy(env: MagentEnv, net_type, gamma=0.98, batch_size=5000, capacity=100000, 
+        lr=1e-4, hidden_dim=32,
+        agent_num=20, prioritised_replay=True, model_save_url='../../data/model/',
+        episode_num=5000, epsilon=1.0, step_epsilon=0.01, tensorboard_data='../../data/log/data_info_',
+        final_epsilon=0.01, save_data=True, csv_url='../../data/csv/', seed_flag=1, update_net=True,
+        update_model_rate=100, print_info_rate=20, use_cuda=True):
     env_action_space = env.action_space.n
     env_obs_space = env.observation_space.shape[0]
-    n_group = 2
     # group1作为对手，真正训练的是group2
-    group1 = None
-    if model_name == 'iql':
-        group1 = IQL(env_obs_space, env_action_space, use_cuda=use_cuda,
-            net_structure_types[net_type], agent_num, prioritised_replay=prioritised_replay, target_net=update_net)
-    elif model_name == 'rainbow':
-        group1 = Rainbow(env_obs_space, env_action_space)
+    group1 = IQL(env_obs_space, env_action_space,
+        net_type, agent_num, gamma, batch_size, capacity, lr, hidden_dim,
+        use_cuda=use_cuda, prioritised_replay=prioritised_replay, target_net=update_net)
 
     group2 = RandomActor(env.env, env.handles[1])
 
     timestamp = time.strftime('%Y%m%d%H%M%S', time.localtime())
-    writer = SummaryWriter('log/data_info_' + net_type + '_' + timestamp)
+    writer = SummaryWriter(tensorboard_data + 'opp_' + timestamp)
     
     group1_win_num = 0
     group2_win_num = 0
@@ -105,7 +111,7 @@ def train_opp_policy(env: MagentEnv, net_type, prioritised_replay=True, model_na
         win_rate_list.append(group1_win_num / (episode + 1))
         opp_win_rate_list.append(group2_win_num / (episode + 1))
 
-    torch.save(group1, 'save_model/' + net_type + '_' + timestamp + '.th')
+    torch.save(group1, model_save_url + 'opp_' + timestamp + '.th')
     print('model is saved.')
     writer.close()
 
@@ -115,27 +121,26 @@ def train_opp_policy(env: MagentEnv, net_type, prioritised_replay=True, model_na
         data_dict[index + 'total_reward'] = total_reward_list
         data_dict[index + 'win_rate'] = win_rate_list
         data_dict[index + 'opp_win_rate'] = opp_win_rate_list
-        dp.get_csv(csv_url, data_dict)
+        dp.get_csv(csv_url + 'opp_policy_' + timestamp + '.csv', data_dict)
 
 
 # 对手为训练好的模型,而非随机动作
-def train(env: MagentEnv, net_type, opp_policy=None, prioritised_replay=True, model_name='iql',
-        episode_num=10000, epsilon=1.0, step_epsilon=0.01, use_cuda=use_cuda,
-        final_epsilon=0.01, save_data=True, csv_url=None, seed_flag=1, update_net=True):
+def train(env: MagentEnv, net_type, gamma=0.98, batch_size=5000, capacity=100000, 
+        lr=1e-4, hidden_dim=32,
+        agent_num=20, opp_policy=None, prioritised_replay=True, model_save_url='../../data/model/',
+        episode_num=1000, epsilon=1.0, step_epsilon=0.01, use_cuda=True, tensorboard_data='../../data/log/data_info_',
+        final_epsilon=0.01, save_data=True, csv_url='../../data/csv/', seed_flag=1, update_net=True,
+        update_model_rate=100, print_info_rate=20):
     env_action_space = env.action_space.n
     env_obs_space = env.observation_space.shape[0]
-    n_group = 2
     # group1作为对手，真正训练的是group2
     group1 = torch.load(opp_policy)
-    group2 = None
-    if model_name == 'iql':
-        group2 = IQL(env_obs_space, env_action_space, 
-            net_structure_types[net_type], agent_num, prioritised_replay=prioritised_replay, target_net=update_net)
-    elif model_name == 'rainbow':
-        group2 = Rainbow(env_obs_space, env_action_space)
+    group2 = IQL(env_obs_space, env_action_space, net_type, agent_num, 
+        gamma, batch_size, capacity, lr, hidden_dim,
+        prioritised_replay=prioritised_replay, target_net=update_net, use_cuda=use_cuda)
 
     timestamp = time.strftime('%Y%m%d%H%M%S', time.localtime())
-    writer = SummaryWriter('log/data_info_' + net_type + '_' + timestamp)
+    writer = SummaryWriter(tensorboard_data + net_type + '_' + timestamp)
     
     group1_win_num = 0
     group2_win_num = 0
@@ -196,7 +201,7 @@ def train(env: MagentEnv, net_type, opp_policy=None, prioritised_replay=True, mo
         win_rate_list.append(group2_win_num / (episode + 1))
         opp_win_rate_list.append(group1_win_num / (episode + 1))
 
-    torch.save(group2, 'save_model/' + net_type + '_' + timestamp + '.th')
+    torch.save(group2, model_save_url + net_type + '_' + timestamp + '.th')
     print('model is saved.')
     writer.close()
 
@@ -206,52 +211,13 @@ def train(env: MagentEnv, net_type, opp_policy=None, prioritised_replay=True, mo
         data_dict[index + 'total_reward'] = total_reward_list
         data_dict[index + 'win_rate'] = win_rate_list
         data_dict[index + 'opp_win_rate'] = opp_win_rate_list
-        dp.get_csv(csv_url, data_dict)
+        dp.get_csv(csv_url + net_type + '_' + timestamp + '.csv', data_dict)
 
-seed = 1
-torch.manual_seed(seed)
-torch.cuda.manual_seed_all(seed)
-np.random.seed(seed)
-random.seed(seed)
+# seed = 0
+# torch.manual_seed(seed)
+# torch.cuda.manual_seed_all(seed)
+# np.random.seed(seed)
+# random.seed(seed)
 # train_opp_policy(env, 'none')
-train(env, 'dyan', opp_policy='save_model/none_20200721193218.th', prioritised_replay=True, update_net=True,
-    csv_url='data/dyan_data/dyan_20vs20_seed11.csv', seed_flag=1)
-
-
-def test(env: MagentEnv, group1_url, opp_url=None, episode_num=50, greedy=True):
-    group1 = torch.load(group1_url)
-    group2 = None
-    
-    if opp_url:
-        group2 = torch.load(opp_url)
-    else:
-        group2 = RandomActor(env.env, env.handles[1])
-
-    group1_win_num = 0
-    group2_win_num = 0
-    for episode in range(episode_num):
-        obs = env.reset()
-        done = False
-        total_reward_group1 = 0
-        total_reward_group2 = 0
-        while not done:
-            group1_as = group1.infer_action(obs[0], greedy=greedy)
-            group2_as = group2.infer_action(obs[1])
-            print('group1 action: ', group1_as, '\t', 'group2 action: ', group2_as)
-            next_obs, rewards, done, alive_info = env.step([group1_as, group2_as], render=True)
-            total_reward_group1 += sum(rewards[0])
-            total_reward_group2 += sum(rewards[1])
-            alive_info = alive_info['agent_live']
-            print('alive info: ', alive_info)
-            obs = next_obs
-
-        print('reward1: ', total_reward_group1, '\t', 'reward2: ', total_reward_group2)
-        if not any(alive_info[0]):
-            group2_win_num += 1
-        elif not any(alive_info[1]):
-            group1_win_num += 1
-        
-    print('group1 win num: ', group1_win_num)
-    print('group2 win num: ', group2_win_num)
-
-# test(env, 'save_model/none_20200721193218.th', opp_url=None)
+# train(env, 'dyan', opp_policy='save_model/none_20200719175723.th', prioritised_replay=True, update_net=True,
+#     csv_url='data/dyan_data/dyan_20vs20_seed16.csv', seed_flag=1)
