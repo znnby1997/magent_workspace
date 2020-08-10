@@ -10,7 +10,7 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 use_cuda = torch.cuda.is_available()
 cuda_id = torch.cuda.current_device()
-torch.set_num_threads(2)
+torch.set_num_threads(1)
 
 if __name__ == '__main__':
     parse = argparse.ArgumentParser()
@@ -18,6 +18,7 @@ if __name__ == '__main__':
     parse.add_argument('--map_size', type=int, default=15)
     parse.add_argument('--max_step', type=int, default=200)
     parse.add_argument('--train_opp', type=int, default=0)
+    parse.add_argument('--distance_sort', type=int, default=0)
     
     parse.add_argument('--print_info_rate', type=int, default=20)
 
@@ -41,11 +42,26 @@ if __name__ == '__main__':
     parse.add_argument('--capacity', type=int, default=100000)
     parse.add_argument('--learning_rate', type=float, default=1e-4)
     parse.add_argument('--hidden_dim', type=int, default=32)
+    parse.add_argument('--em_dim', type=int, default=32)
+    parse.add_argument('--nonlin', type=str, default='softmax')
+    parse.add_argument('--aggregate_form', type=str, default='mean')
+    
+    parse.add_argument('--test_model', type=int, default=0)
+    parse.add_argument('--test_model_url', type=str, default=None)
+    parse.add_argument('--test_episode_num', type=int, default=20)
+    parse.add_argument('--render', type=int, default=1)
+
+    parse.add_argument('--epoch_train', type=int, default=0)
+    parse.add_argument('--episodes_per_epoch', type=int, default=100)
+    parse.add_argument('--episodes_per_test', type=int, default=20)
+    parse.add_argument('--epoch_num', type=int, default=500)
+    parse.add_argument('--print_info', type=int, default=1)
 
     args = parse.parse_args()
     agent_num = args.agent_num
     map_size = args.map_size
     max_step = args.max_step
+    distance_sort = args.distance_sort
 
     seed = args.seed
     torch.manual_seed(seed)
@@ -75,23 +91,52 @@ if __name__ == '__main__':
     capacity = args.capacity
     learning_rate = args.learning_rate
     hidden_dim = args.hidden_dim
+    em_dim = args.em_dim
+    nonlin = args.nonlin
+    aggregate_form = args.aggregate_form
+
+    test_model = args.test_model
+    test_model_url = args.test_model_url
+    test_episode_num = args.test_episode_num
+    render = args.render
+
+    epoch_train = args.epoch_train
+    episodes_per_epoch = args.episodes_per_epoch
+    episodes_per_test = args.episodes_per_test
+    epoch_num = args.epoch_num
+    print_info = args.print_info
 
     print('current env info: ', 'GPU ', use_cuda, ' GPU id ', cuda_id)
 
     print('use parameters: {}'.format(args))
 
-    if train_opp:
-        env = MagentEnv(agent_num=agent_num, map_size=map_size, max_step=max_step, opp_policy_random=True)
+    if test_model:
+        env = MagentEnv(agent_num=agent_num, map_size=map_size, max_step=max_step, opp_policy_random=False, distance_sort=distance_sort)
+        main.test_model(env, model=[opp_policy, test_model_url], episode_num=test_episode_num, render=render)
+    elif train_opp:
+        env = MagentEnv(agent_num=agent_num, map_size=map_size, max_step=max_step, opp_policy_random=True, distance_sort=distance_sort)
         main.train_opp_policy(env, net_type, gamma, batch_size, capacity, learning_rate, hidden_dim, agent_num, 
             prioritised_replay, model_save_url, episode_num, epsilon, epsilon_step,
             tensorboard_data, final_epsilon, save_data, csv_url, seed, update_net, update_model_rate, 
             print_info_rate, use_cuda)
+    elif epoch_train:
+        env = MagentEnv(agent_num=agent_num, map_size=map_size, max_step=max_step, opp_policy_random=False, distance_sort=distance_sort)
+        main.epoch_train(env, net_type, gamma=gamma, batch_size=batch_size, capacity=capacity, 
+            lr=learning_rate, hidden_dim=hidden_dim, nonlin=nonlin, aggregate_form=aggregate_form,
+            agent_num=agent_num, opp_policy=opp_policy, 
+            prioritised_replay=prioritised_replay, model_save_url=model_save_url,
+            episodes_per_epoch=episodes_per_epoch, episodes_per_test=episodes_per_test, epoch_num=epoch_num, 
+            epsilon=epsilon, step_epsilon=epsilon_step, 
+            use_cuda=use_cuda, tensorboard_data=tensorboard_data,
+            final_epsilon=final_epsilon, save_data=save_data, csv_url=csv_url, seed_flag=seed, update_net=update_net,
+            update_model_rate=update_model_rate, print_info_rate=print_info_rate, em_dim=em_dim, print_info=print_info)
     else:
-        env = MagentEnv(agent_num=agent_num, map_size=map_size, max_step=max_step, opp_policy_random=False)
-        main.train(env, net_type, gamma, batch_size, capacity, learning_rate, hidden_dim, agent_num, opp_policy, 
+        env = MagentEnv(agent_num=agent_num, map_size=map_size, max_step=max_step, opp_policy_random=False, distance_sort=distance_sort)
+        main.train(env, net_type, gamma, batch_size, capacity, learning_rate, hidden_dim, nonlin, 
+            aggregate_form, agent_num, opp_policy, 
             prioritised_replay, model_save_url, episode_num, epsilon,
             epsilon_step, use_cuda, tensorboard_data, final_epsilon, save_data, csv_url, seed, update_net,
-            update_model_rate, print_info_rate)
+            update_model_rate, print_info_rate, em_dim)
 
 
 

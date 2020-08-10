@@ -24,7 +24,7 @@ def obs_info_extract(views, features, group_id, max_agent, debug=False, have_env
         agent自身信息：feature包含需要的agent自身信息(id embedding, last action, last reward, relative pos)
                     同时包含自身血量、自身所在group、自身minimap
         环境信息：观测到的wall的13 * 13维向量
-        其他agent信息：血量, 所在group, 自身minimap，相对观测者的位置
+        其他agent信息：血量, 所在group, 相对观测者的位置
     """
     self_infos, opp_infos, partner_infos = [], [], []
     env_info = views[0, :, :, 0].flatten() # 环境信息
@@ -78,7 +78,8 @@ obs_input = obs_info_extract
 
 
 class MagentEnv:
-    def __init__(self, agent_num=20, map_size=15, id_set=[0, 1], shift_delta=0, max_step=100, have_env_info=False, opp_policy_random=True):
+    def __init__(self, agent_num=20, map_size=15, id_set=[0, 1], shift_delta=0, max_step=100, 
+                    have_env_info=False, opp_policy_random=True, distance_sort=False):
         self.agent_num = agent_num
 
         magent.utility.init_logger('battle')
@@ -94,6 +95,7 @@ class MagentEnv:
         self.n_group = len(id_set)
         self.shift_delta = shift_delta
         self.opp_policy_random = opp_policy_random
+        self.distance_sort = distance_sort
 
         # i取值((map_size - 1)/2 - 5, (map_size - 1)/2)
         # (4-5, 4+5)
@@ -121,14 +123,21 @@ class MagentEnv:
         # 得到活着的agent的id
         agents_id = self.get_group_agent_id(0)
         views, features = self.env.get_observation(self.handles[0])
-        obs.append(obs_input(views, features, 0, self.agent_num, have_env_info=self.have_env_info))
+        if self.distance_sort:
+            obs.append(self.obs_sort_by_distance(obs_input(views, features, 0, self.agent_num, have_env_info=self.have_env_info)))
+        else:
+            obs.append(obs_input(views, features, 0, self.agent_num, have_env_info=self.have_env_info))
 
         if self.opp_policy_random:
             opp_obs = self.env.get_observation(self.handles[1])
             obs.append(opp_obs)
         else:
             views, features = self.env.get_observation(self.handles[1])
-            obs.append(obs_input(views, features, 1, self.agent_num, have_env_info=self.have_env_info))
+            if self.distance_sort:
+                obs.append(
+                    self.obs_sort_by_distance(obs_input(views, features, 1, self.agent_num, have_env_info=self.have_env_info)))
+            else:
+                obs.append(obs_input(views, features, 1, self.agent_num, have_env_info=self.have_env_info))
         return obs
 
     def get_group_agent_id(self, group_id):
@@ -171,7 +180,6 @@ class MagentEnv:
         generate_map(self.env, self.id_set, pos_set, self.handles)
 
         obs = self.get_obs()
-
         return obs
     
     def step(self, actions, render=False):
@@ -200,6 +208,21 @@ class MagentEnv:
 
         if self.step_num > self.max_step or self.done:
             print('done !!!!!!!!', self.step_num)
+
+            # 加入一个最终胜利的reward
+            agent_live_info = self.get_live_agent()
+
+            if not any(agent_live_info[0]):
+                # group 0 agent全部死亡, 另一组获胜
+                # 存活的agent全部获得一个最终reward
+                agent_ids = self.get_group_agent_id(1)
+                reward[1][agent_ids] += 10
+            
+            if not any(agent_live_info[1]):
+                # group 1 agent全部死亡
+                agent_ids = self.get_group_agent_id(0)
+                reward[0][agent_ids] += 10
+            
             self.step_num = 0
             self.done = True
 
@@ -223,6 +246,53 @@ class MagentEnv:
 
         return live
 
+    def obs_sort_by_distance(self, group_original_obs):
+        # 前37个为自身信息
+        ans = []
+        for original_obs in group_original_obs:
+            ans_ = original_obs[:37]
+            opp_index = 37 + 28 * self.agent_num
+            opps_info = np.hsplit(original_obs[37:opp_index], 20) # 20 agents
+            partners_info = np.hsplit(original_obs[opp_index:], 19) # 19 agents
+
+            opps = []
+            pars = []
+
+            for opp in opps_info:
+                if np.sum(opp) == 0:
+                    opps.append([20, opp.tolist()])
+                else:
+                    index = np.nonzero(opp)[0] - 2
+                    x = index[-2]
+                    y = index[-1] - 13
+                    opps.append([np.abs(x - 6) + np.abs(y - 6), opp.tolist()])
+            opps = sorted(opps)
+            
+            for par in partners_info:
+                if np.sum(par) == 0:
+                    pars.append([20, par.tolist()])
+                else:
+                    index = np.nonzero(par)[0] - 2
+                    x = index[-2]
+                    y = index[-1] - 13
+                    pars.append([np.abs(x - 6) + np.abs(y - 6), par.tolist()])
+            pars = sorted(pars)
+
+            opps_info = []
+            pars_info = []
+            for opp in opps:
+                opps_info.append(opp[-1])
+            opps_info = np.hstack(opps_info)
+            for par in pars:
+                pars_info.append(par[-1])
+            pars_info = np.hstack(pars_info)
+            ans_ = np.hstack((ans_, opps_info, pars_info))
+            ans.append(ans_)
+        # print(ans)
+        ans = np.vstack(ans)
+        # print(ans.shape)
+        return ans.astype(float)
+
     @property
     def action_space(self):
         # 8 + 13
@@ -244,7 +314,7 @@ if __name__ == '__main__':
     print('action space: ', env.action_space.n)
     print('obs space: ', env.observation_space.shape[0])
     obs = env.reset()
-    env.env.render()
+    # env.env.render()
     # print('group1 obs: ', obs[0][0])
     # print('group2 obs: ', obs[1])
     # for i in range(len(obs[0])):

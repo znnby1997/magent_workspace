@@ -15,6 +15,7 @@ class Dyan(BasicNet):
         self.align_embedding = nn.Linear(3 * hidden_dim, hidden_dim)
         self.aggregate_form = aggregate_form
         self.agent_num = agent_num
+        # self.output_q = nn.Linear(hidden_dim, n_actions)
 
     def att_layer(self, x):
         # DyAN聚合方式, 所有的对手观测聚合, 所有的队友观测聚合, 最后拼接三个信息

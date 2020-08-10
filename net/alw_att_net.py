@@ -8,9 +8,8 @@ sys.path.append('..')
 from net.basic_net import BasicNet
 
 class AlwAttNet(BasicNet):
-    def __init__(self, obs_dim, n_actions, hidden_dim, em_dim=32, nonlin='softmax', **kwargs):
+    def __init__(self, obs_dim, n_actions, hidden_dim, agent_num, em_dim=32, nonlin='softmax', **kwargs):
         super().__init__(obs_dim, n_actions, hidden_dim, em_dim)
-        self.mlp = nn.Linear(obs_dim, hidden_dim)
         self.nonlin = nonlin
 
         # agent level attention
@@ -35,4 +34,4 @@ class AlwAttNet(BasicNet):
             encodings.append(f.relu(self.other_encoder(agent_info)))
         encodings = torch.stack(encodings).permute(1, 0, 2) # size: [batch, agent_num, embedding_dim]
         att_output = torch.bmm(self.att_weight.unsqueeze(1), encodings).squeeze(1) # size: [batch, em_dim]
-        return f.relu(self.att_output_encoder(att_output))
+        return self.att_output_encoder(att_output)
