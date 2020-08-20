@@ -27,11 +27,9 @@ class AlwAttNet(BasicNet):
 
         self_info = x[:, 0:37]
         other_info = x[:, 37:]
-        agents_info = other_info.split(28, dim=1)
-        encodings = []
-        encodings.append(self.self_encoder(self_info))
-        for agent_info in agents_info:
-            encodings.append(f.relu(self.other_encoder(agent_info)))
-        encodings = torch.stack(encodings).permute(1, 0, 2) # size: [batch, agent_num, embedding_dim]
-        att_output = torch.bmm(self.att_weight.unsqueeze(1), encodings).squeeze(1) # size: [batch, em_dim]
+        agents_info = torch.stack(other_info.split(28, dim=1)) # size: [other agents num, batch, 28]
+        other_embedding = self.other_encoder(agents_info) # size: [other agents num, batch, em_dim]
+        self_embedding = self.self_encoder(self_info) # size: [batch, em_dim]
+        encodings = torch.cat([self_embedding.unsqueeze(0), other_embedding], dim=0) # size: [agents num, batch, em_dim]
+        att_output = torch.bmm(self.att_weight.unsqueeze(1), encodings.permute(1, 0, 2)).squeeze(1) # size: [batch, em_dim]
         return self.att_output_encoder(att_output)

@@ -14,10 +14,10 @@ class GruGenAttNet(BasicNet):
         self.gru = nn.GRU(input_size=em_dim, hidden_size=em_dim, bidirectional=True)
 
         # 转换参数,训练获得
-        self.trans_params = nn.Linear(2 * em_dim, em_dim)
+        self.trans_params = nn.Linear(2 * em_dim, hidden_dim)
         # self.trans_params = nn.Parameter(torch.Tensor(hidden_dim, hidden_dim * 2))
         # 多头参数,训练多头attention
-        self.multiheads_params = nn.Linear(em_dim, heads_num)
+        self.multiheads_params = nn.Linear(hidden_dim, heads_num)
         # self.multiheads_params = nn.Parameter(torch.Tensor(heads_num, hidden_dim))
 
         self.align_layer = nn.Linear(heads_num * em_dim * 2, hidden_dim)
@@ -26,15 +26,12 @@ class GruGenAttNet(BasicNet):
         # 1.每个info向量进行编码
         self_info = x[:, 0:37]
         other_info = x[:, 37:]
-        agents_info = other_info.split(28, dim=1)
-        infos_encoder = []
-        infos_encoder.append(self.self_encoder(self_info))
-        for agent_info in agents_info:
-            infos_encoder.append(f.relu(self.other_encoder(agent_info)))
-        infos_encoder = torch.stack(infos_encoder) # size: [agent_num, batch, em_dim]
-
+        agents_info = torch.stack(other_info.split(28, dim=1)) # size: [other agents num, batch, 28]
+        other_embedding = f.relu(self.other_encoder(agents_info)) # size: [other agents num, batch, em_dim]
+        self_embedding = f.relu(self.self_encoder(self_info)) # size: [batch, em_dim]
+        encodings = torch.cat([self_embedding.unsqueeze(0), other_embedding], dim=0) # size: [agents num, batch, em_dim]
         # 2.将所有的info通过双向的gru
-        gru_output, _ = self.gru(infos_encoder) # gru output size: [agent_num, batch, em_dim * 2]
+        gru_output, _ = self.gru(encodings) # gru output size: [agent_num, batch, em_dim * 2]
         h = gru_output.permute(1, 0, 2) # size: [batch, agent_num, em_dim*2]
         self.att_weight = f.softmax(
             self.multiheads_params(

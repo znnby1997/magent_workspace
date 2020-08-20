@@ -16,17 +16,19 @@ from net.gru_weight import GruGenAttNet
 from net.none_net import NoneNet
 from net.nonlin_att_net import NonlinAttNet
 from net.dyan_group import DyanGroup
+from net.group_att_agg import GAA
 
 import time
 import random
 
 net_dict = {
     'alw': AlwAttNet, 'dot_scale': DotScaleAttNet, 'dyan': Dyan,
-    'gruga': GruGenAttNet, 'none': NoneNet, 'nonlinatt': NonlinAttNet, 'dyan_group': DyanGroup
+    'gruga': GruGenAttNet, 'none': NoneNet, 'nonlinatt': NonlinAttNet, 'dyan_group': DyanGroup,
+    'gaa': GAA
 }
 
 class IQL(object):
-    def __init__(self, obs_dim, n_actions, net, agent_num, gamma=0.98, batch_size=5000, 
+    def __init__(self, obs_dim, n_actions, net, agent_num, group_num, group_greedy, gamma=0.98, batch_size=5000,
                 capacity=100000, lr=1e-4, hidden_dim=32, em_dim=32, prioritised_replay=False, target_net=False,
                 use_cuda=False, nonlin='softmax', aggregate_form='mean'):
         self.gamma = gamma
@@ -43,12 +45,12 @@ class IQL(object):
 
         self.n_actions = n_actions
         
-        self.q_net = net_dict[net](obs_dim, n_actions, agent_num=agent_num, hidden_dim=hidden_dim, 
-                                    nonlin=nonlin, aggregate_form=aggregate_form, em_dim=em_dim)
+        self.q_net = net_dict[net](obs_dim, n_actions, agent_num=agent_num, hidden_dim=hidden_dim, group_greedy=group_greedy,
+                                    nonlin=nonlin, aggregate_form=aggregate_form, em_dim=em_dim, group_num=group_num)
         if self.target_net:
             print('Add double dqn')
-            self.target_q_net = net_dict[net](obs_dim, n_actions, agent_num=agent_num, hidden_dim=hidden_dim,
-                                                nonlin=nonlin, aggregate_form=aggregate_form, em_dim=em_dim)
+            self.target_q_net = net_dict[net](obs_dim, n_actions, agent_num=agent_num, hidden_dim=hidden_dim, group_greedy=group_greedy,
+                                                nonlin=nonlin, aggregate_form=aggregate_form, em_dim=em_dim, group_num=group_num)
             self.update_target()
         
         if self.use_cuda:

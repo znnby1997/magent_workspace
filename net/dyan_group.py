@@ -15,6 +15,7 @@ class DyanGroup(BasicNet):
         self.align_embedding = nn.Linear(2 * hidden_dim, hidden_dim)
         self.aggregate_form = aggregate_form
         self.agent_num = agent_num
+        # self.att_weight = [0.9, 0.1, 0.05, 0.9, 0.1, 0.05]
 
     def att_layer(self, x):
         # 输入的观测已经按距离排好序了(由近及远)
@@ -24,10 +25,13 @@ class DyanGroup(BasicNet):
         opp_embeddings = self.aggregate_vector(opp_groups)
         partner_embeddings = self.aggregate_vector(partner_groups)
         self_embedding = f.relu(self.self_encoder(self_info)) # size: [batch, hidden]
+        # embedding = opp_embeddings + partner_embeddings # size: [6 batch * hidden_dim]
+        # embedding.append(self_embedding)
         other_info = torch.stack(opp_embeddings + partner_embeddings) # size: [6 * batch * hidden]
         self.att_weight = torch.tensor([0.9, 0.1, 0.05, 0.9, 0.1, 0.05], dtype=torch.float).cuda().reshape(1, -1) # size: 1 * 6
         other_embedding = torch.matmul(self.att_weight, other_info.permute(1, 0, 2)).squeeze(1) # size: [batch, hidden]
         embedding = torch.cat([other_embedding, self_embedding], dim=1) # size: [batch, 2 * hidden]
+        # embedding = torch.cat(embedding, dim=1) # size: [batch, 7 * hidden_dim]
         att_output = f.relu(self.align_embedding(embedding)) # size: [batch, hidden]
         return att_output
             
@@ -49,6 +53,7 @@ class DyanGroup(BasicNet):
         return opp_groups, partner_groups
 
     def aggregate_vector(self, groups):
+        # attention weights: 按距离分[0.9, 0.1, 0.05, 0.9, 0.1, 0.05]
         groups_embedding = []
         for g in groups:
             encoder = f.relu(self.feature_encoder(g)) # size: 5 * batch * hidden_dim

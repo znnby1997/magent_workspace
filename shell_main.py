@@ -36,6 +36,8 @@ if __name__ == '__main__':
     parse.add_argument('--update_net', type=int, default=1)
     parse.add_argument('--update_model_rate', type=int, default=100)
     parse.add_argument('--opp_policy', type=str, default=None)
+    parse.add_argument('--group_num', type=int, default=4)
+    parse.add_argument('--group_greedy', type=int, default=0)
 
     parse.add_argument('--gamma', type=float, default=0.98)
     parse.add_argument('--batch_size', type=int, default=5000)
@@ -85,6 +87,8 @@ if __name__ == '__main__':
     update_model_rate = args.update_model_rate
     print_info_rate = args.print_info_rate
     opp_policy = args.opp_policy
+    group_num = args.group_num
+    group_greedy = args.group_greedy
 
     gamma = args.gamma
     batch_size = args.batch_size
@@ -123,6 +127,7 @@ if __name__ == '__main__':
         env = MagentEnv(agent_num=agent_num, map_size=map_size, max_step=max_step, opp_policy_random=False, distance_sort=distance_sort)
         main.epoch_train(env, net_type, gamma=gamma, batch_size=batch_size, capacity=capacity, 
             lr=learning_rate, hidden_dim=hidden_dim, nonlin=nonlin, aggregate_form=aggregate_form,
+            group_num=group_num, group_greedy=group_greedy,
             agent_num=agent_num, opp_policy=opp_policy, 
             prioritised_replay=prioritised_replay, model_save_url=model_save_url,
             episodes_per_epoch=episodes_per_epoch, episodes_per_test=episodes_per_test, epoch_num=epoch_num, 
@@ -132,8 +137,8 @@ if __name__ == '__main__':
             update_model_rate=update_model_rate, print_info_rate=print_info_rate, em_dim=em_dim, print_info=print_info)
     else:
         env = MagentEnv(agent_num=agent_num, map_size=map_size, max_step=max_step, opp_policy_random=False, distance_sort=distance_sort)
-        main.train(env, net_type, gamma, batch_size, capacity, learning_rate, hidden_dim, nonlin, 
-            aggregate_form, agent_num, opp_policy, 
+        main.train(env, net_type, gamma, batch_size, capacity, group_num, learning_rate, hidden_dim, nonlin, 
+            aggregate_form, group_greedy, agent_num, opp_policy, 
             prioritised_replay, model_save_url, episode_num, epsilon,
             epsilon_step, use_cuda, tensorboard_data, final_epsilon, save_data, csv_url, seed, update_net,
             update_model_rate, print_info_rate, em_dim)

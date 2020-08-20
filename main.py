@@ -26,7 +26,8 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 """
     net_dict = {
     'alw': AlwAttNet, 'dot_scale': DotScaleAttNet, 'dyan': Dyan,
-    'gruga': GruGenAttNet, 'none', NoneNet, 'nonlinatt': NonlinAttNet, 'dyan_group': DyanGroup
+    'gruga': GruGenAttNet, 'none', NoneNet, 'nonlinatt': NonlinAttNet, 'dyan_group': DyanGroup,
+    'gaa': GAA
 }
 """
 # update_model_rate = 100
@@ -125,8 +126,8 @@ def train_opp_policy(env: MagentEnv, net_type, gamma=0.98, batch_size=5000, capa
 
 
 # 对手为训练好的模型,而非随机动作
-def train(env: MagentEnv, net_type, gamma=0.98, batch_size=5000, capacity=100000, 
-        lr=1e-4, hidden_dim=32, nonlin='softmax', aggregate_form='mean',
+def train(env: MagentEnv, net_type, gamma=0.98, batch_size=5000, capacity=100000, group_num=4,
+        lr=1e-4, hidden_dim=32, nonlin='softmax', aggregate_form='mean', group_greedy=False,
         agent_num=20, opp_policy=None, prioritised_replay=True, model_save_url='../../data/model/',
         episode_num=1000, epsilon=1.0, step_epsilon=0.01, use_cuda=True, tensorboard_data='../../data/log/data_info_',
         final_epsilon=0.01, save_data=True, csv_url='../../data/csv/', seed_flag=1, update_net=True,
@@ -135,7 +136,7 @@ def train(env: MagentEnv, net_type, gamma=0.98, batch_size=5000, capacity=100000
     env_obs_space = env.observation_space.shape[0]
     # group1作为对手，真正训练的是group2
     group1 = torch.load(opp_policy)
-    group2 = IQL(env_obs_space, env_action_space, net_type, agent_num, 
+    group2 = IQL(env_obs_space, env_action_space, net_type, agent_num, group_num, group_greedy,
         gamma, batch_size, capacity, lr, hidden_dim, nonlin=nonlin, aggregate_form=aggregate_form,
         prioritised_replay=prioritised_replay, target_net=update_net, use_cuda=use_cuda, em_dim=em_dim)
 
@@ -262,7 +263,7 @@ def test_model(env: MagentEnv, model=None, episode_num=20, render=True, print_at
 
 # 统计的是total_reward以及每个epoch中测试时group2平均击杀数量
 def epoch_train(env: MagentEnv, net_type, gamma=0.98, batch_size=5000, capacity=100000, 
-    lr=1e-4, hidden_dim=32, nonlin='softmax', aggregate_form='mean',
+    lr=1e-4, hidden_dim=32, nonlin='softmax', aggregate_form='mean', group_num=4, group_greedy=False,
     agent_num=20, opp_policy=None, prioritised_replay=True, model_save_url='../../data/model/',
     episodes_per_epoch=100, episodes_per_test=20, epoch_num=500, epsilon=1.0, step_epsilon=0.01, 
     use_cuda=True, tensorboard_data='../../data/log/data_info_',
@@ -272,7 +273,7 @@ def epoch_train(env: MagentEnv, net_type, gamma=0.98, batch_size=5000, capacity=
     env_obs_space = env.observation_space.shape[0]
     # group1作为对手，真正训练的是group2
     group1 = torch.load(opp_policy)
-    group2 = IQL(env_obs_space, env_action_space, net_type, agent_num, 
+    group2 = IQL(env_obs_space, env_action_space, net_type, agent_num, group_num, group_greedy,
                     gamma, batch_size, capacity, lr, hidden_dim, nonlin=nonlin, aggregate_form=aggregate_form,
                     prioritised_replay=prioritised_replay, target_net=update_net, use_cuda=use_cuda, em_dim=em_dim)
 
