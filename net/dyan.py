@@ -17,7 +17,7 @@ class Dyan(BasicNet):
         self.agent_num = agent_num
         # self.output_q = nn.Linear(hidden_dim, n_actions)
 
-    def att_layer(self, x):
+    def att_layer(self, x, greedy_group=False):
         # DyAN聚合方式, 所有的对手观测聚合, 所有的队友观测聚合, 最后拼接三个信息
         self_info = x[:, 0:37]
         opp_index = 37 + 28 * self.agent_num

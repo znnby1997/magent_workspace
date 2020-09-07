@@ -22,7 +22,7 @@ if __name__ == '__main__':
     
     parse.add_argument('--print_info_rate', type=int, default=20)
 
-    parse.add_argument('--net_type', type=str, default='none')
+    parse.add_argument('--net_type', type=str, default='')
     parse.add_argument('--prioritised_replay', type=int, default=1)
     parse.add_argument('--model_save_url', type=str, default='../../data/model/')
     parse.add_argument('--episode_num', type=int, default=5000)
@@ -36,8 +36,7 @@ if __name__ == '__main__':
     parse.add_argument('--update_net', type=int, default=1)
     parse.add_argument('--update_model_rate', type=int, default=100)
     parse.add_argument('--opp_policy', type=str, default=None)
-    parse.add_argument('--group_num', type=int, default=4)
-    parse.add_argument('--group_greedy', type=int, default=0)
+    parse.add_argument('--group_num', type=int, default=2)
 
     parse.add_argument('--gamma', type=float, default=0.98)
     parse.add_argument('--batch_size', type=int, default=5000)
@@ -47,6 +46,7 @@ if __name__ == '__main__':
     parse.add_argument('--em_dim', type=int, default=32)
     parse.add_argument('--nonlin', type=str, default='softmax')
     parse.add_argument('--aggregate_form', type=str, default='mean')
+    parse.add_argument('--concatenation', type=int, default=0)
     
     parse.add_argument('--test_model', type=int, default=0)
     parse.add_argument('--test_model_url', type=str, default=None)
@@ -56,8 +56,9 @@ if __name__ == '__main__':
     parse.add_argument('--epoch_train', type=int, default=0)
     parse.add_argument('--episodes_per_epoch', type=int, default=100)
     parse.add_argument('--episodes_per_test', type=int, default=20)
-    parse.add_argument('--epoch_num', type=int, default=500)
+    parse.add_argument('--epoch_num', type=int, default=100)
     parse.add_argument('--print_info', type=int, default=1)
+    parse.add_argument('--print_mask', type=int, default=0)
 
     args = parse.parse_args()
     agent_num = args.agent_num
@@ -88,7 +89,6 @@ if __name__ == '__main__':
     print_info_rate = args.print_info_rate
     opp_policy = args.opp_policy
     group_num = args.group_num
-    group_greedy = args.group_greedy
 
     gamma = args.gamma
     batch_size = args.batch_size
@@ -98,6 +98,7 @@ if __name__ == '__main__':
     em_dim = args.em_dim
     nonlin = args.nonlin
     aggregate_form = args.aggregate_form
+    concatenation = args.concatenation
 
     test_model = args.test_model
     test_model_url = args.test_model_url
@@ -109,6 +110,7 @@ if __name__ == '__main__':
     episodes_per_test = args.episodes_per_test
     epoch_num = args.epoch_num
     print_info = args.print_info
+    print_mask = args.print_mask
 
     print('current env info: ', 'GPU ', use_cuda, ' GPU id ', cuda_id)
 
@@ -116,7 +118,8 @@ if __name__ == '__main__':
 
     if test_model:
         env = MagentEnv(agent_num=agent_num, map_size=map_size, max_step=max_step, opp_policy_random=False, distance_sort=distance_sort)
-        main.test_model(env, model=[opp_policy, test_model_url], episode_num=test_episode_num, render=render)
+        main.test_model(env, model=[opp_policy, test_model_url], episode_num=test_episode_num, render=render, 
+                print_group_mask=print_mask, csv_url=csv_url, save_data=save_data, seed=seed, print_info=print_info)
     elif train_opp:
         env = MagentEnv(agent_num=agent_num, map_size=map_size, max_step=max_step, opp_policy_random=True, distance_sort=distance_sort)
         main.train_opp_policy(env, net_type, gamma, batch_size, capacity, learning_rate, hidden_dim, agent_num, 
@@ -127,21 +130,21 @@ if __name__ == '__main__':
         env = MagentEnv(agent_num=agent_num, map_size=map_size, max_step=max_step, opp_policy_random=False, distance_sort=distance_sort)
         main.epoch_train(env, net_type, gamma=gamma, batch_size=batch_size, capacity=capacity, 
             lr=learning_rate, hidden_dim=hidden_dim, nonlin=nonlin, aggregate_form=aggregate_form,
-            group_num=group_num, group_greedy=group_greedy,
+            group_num=group_num,
             agent_num=agent_num, opp_policy=opp_policy, 
             prioritised_replay=prioritised_replay, model_save_url=model_save_url,
             episodes_per_epoch=episodes_per_epoch, episodes_per_test=episodes_per_test, epoch_num=epoch_num, 
             epsilon=epsilon, step_epsilon=epsilon_step, 
             use_cuda=use_cuda, tensorboard_data=tensorboard_data,
             final_epsilon=final_epsilon, save_data=save_data, csv_url=csv_url, seed_flag=seed, update_net=update_net,
-            update_model_rate=update_model_rate, print_info_rate=print_info_rate, em_dim=em_dim, print_info=print_info)
+            update_model_rate=update_model_rate, print_info_rate=print_info_rate, em_dim=em_dim, print_info=print_info, concatenation=concatenation)
     else:
         env = MagentEnv(agent_num=agent_num, map_size=map_size, max_step=max_step, opp_policy_random=False, distance_sort=distance_sort)
         main.train(env, net_type, gamma, batch_size, capacity, group_num, learning_rate, hidden_dim, nonlin, 
-            aggregate_form, group_greedy, agent_num, opp_policy, 
+            aggregate_form, agent_num, opp_policy, 
             prioritised_replay, model_save_url, episode_num, epsilon,
             epsilon_step, use_cuda, tensorboard_data, final_epsilon, save_data, csv_url, seed, update_net,
-            update_model_rate, print_info_rate, em_dim)
+            update_model_rate, print_info_rate, em_dim, concatenation, print_info)
 
 
 

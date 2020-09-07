@@ -12,7 +12,7 @@ from utils.experience_memory import ExperienceMemory, Dynamics, PrioritisedBuffe
 from net.alw_att_net import AlwAttNet
 from net.dot_scale_att_net import DotScaleAttNet
 from net.dyan import Dyan
-from net.gru_weight import GruGenAttNet
+from net.gru_weight import GruGenAttNet, GruGenAttNetNew
 from net.none_net import NoneNet
 from net.nonlin_att_net import NonlinAttNet
 from net.dyan_group import DyanGroup
@@ -24,11 +24,11 @@ import random
 net_dict = {
     'alw': AlwAttNet, 'dot_scale': DotScaleAttNet, 'dyan': Dyan,
     'gruga': GruGenAttNet, 'none': NoneNet, 'nonlinatt': NonlinAttNet, 'dyan_group': DyanGroup,
-    'gaa': GAA
+    'gaa': GAA, 'gruga2': GruGenAttNetNew
 }
 
 class IQL(object):
-    def __init__(self, obs_dim, n_actions, net, agent_num, group_num, group_greedy, gamma=0.98, batch_size=5000,
+    def __init__(self, obs_dim, n_actions, net, agent_num, group_num, concatenation, gamma=0.98, batch_size=5000,
                 capacity=100000, lr=1e-4, hidden_dim=32, em_dim=32, prioritised_replay=False, target_net=False,
                 use_cuda=False, nonlin='softmax', aggregate_form='mean'):
         self.gamma = gamma
@@ -45,12 +45,12 @@ class IQL(object):
 
         self.n_actions = n_actions
         
-        self.q_net = net_dict[net](obs_dim, n_actions, agent_num=agent_num, hidden_dim=hidden_dim, group_greedy=group_greedy,
-                                    nonlin=nonlin, aggregate_form=aggregate_form, em_dim=em_dim, group_num=group_num)
+        self.q_net = net_dict[net](obs_dim, n_actions, agent_num=agent_num, hidden_dim=hidden_dim,
+                                    nonlin=nonlin, aggregate_form=aggregate_form, em_dim=em_dim, group_num=group_num, concatenation=concatenation)
         if self.target_net:
             print('Add double dqn')
-            self.target_q_net = net_dict[net](obs_dim, n_actions, agent_num=agent_num, hidden_dim=hidden_dim, group_greedy=group_greedy,
-                                                nonlin=nonlin, aggregate_form=aggregate_form, em_dim=em_dim, group_num=group_num)
+            self.target_q_net = net_dict[net](obs_dim, n_actions, agent_num=agent_num, hidden_dim=hidden_dim,
+                                                nonlin=nonlin, aggregate_form=aggregate_form, em_dim=em_dim, group_num=group_num, concatenation=concatenation)
             self.update_target()
         
         if self.use_cuda:
@@ -62,8 +62,9 @@ class IQL(object):
     def update_target(self):
         self.target_q_net.load_state_dict(self.q_net.state_dict())
 
-    def infer_action(self, joint_obs, epsilon=1.0, greedy=False):
+    def infer_action(self, joint_obs, epsilon=1.0, greedy=False, print_mask=False):
         actions = []
+        mask = []
         with torch.no_grad():
             joint_obs = torch.tensor(joint_obs, dtype=torch.float)
             if self.use_cuda:
@@ -71,11 +72,15 @@ class IQL(object):
 
             for obs in joint_obs:
                 if random.uniform(0, 1) >= epsilon or greedy:
-                    q = self.q_net.q(obs.reshape(1, -1))
+                    q = self.q_net.q(obs.reshape(1, -1), greedy_group=greedy)
                     actions.append(q.max(1)[1].item())
+                    
+                    if print_mask:
+                        m = self.q_net.get_mask()
+                        mask.append(m)
                 else:
                     actions.append(random.randint(0, self.n_actions - 1))
-        return actions
+        return actions, mask
 
     def push_data(self, joint_obs, joint_actions, rewards, next_joint_obs, dones):
         # 这里输入的joint_obs的shape[0] <= agent_num, 只保留活着的agent的数据

@@ -15,14 +15,18 @@ def generate_map(env, id_sets, pos_sets, handles):
     right_id = id_sets[1]
     env.add_agents(handles[right_id], method='custom', pos=right_pos)
 
-def obs_info_extract(views, features, group_id, max_agent, debug=False, have_env_info=False):
+""" 从环境的原始观测中提取信息作为我们的原始观测
+    这里新加入一个噪声参数，用于在原始观测中加入噪声
+    这里直接设置额外加入3个噪声agent信息
+"""
+def obs_info_extract(views, features, group_id, max_agent, debug=False, have_env_info=False, noisy=False):
     # 这里的views和features表示了一个group的
     # group_id=0表示group1，1表示group2
     assert len(views.shape) == 4
 
     """提取后的观测向量：[agent自身信息，环境信息，观测到的各个对手信息，观测到的各个队友信息]
         agent自身信息：feature包含需要的agent自身信息(id embedding, last action, last reward, relative pos)
-                    同时包含自身血量、自身所在group、自身minimap
+                    同时包含自身血量、自身所在group、自身minimap(minimap去掉)
         环境信息：观测到的wall的13 * 13维向量
         其他agent信息：血量, 所在group, 相对观测者的位置
     """
@@ -31,7 +35,7 @@ def obs_info_extract(views, features, group_id, max_agent, debug=False, have_env
     # 提取自身观测信息向量
     for view, feature in zip(views, features):
         self_view_vector = view[6][6] # 13*13观测视角中, 自身观测在中间位置
-        self_view_info = np.stack([self_view_vector[2], group_id, self_view_vector[3]]) # 血量、group、minimap
+        self_view_info = np.stack([self_view_vector[2], group_id]) # 血量、group
         self_info = np.append(feature, self_view_info)
         self_infos.append(self_info)
 
@@ -69,6 +73,13 @@ def obs_info_extract(views, features, group_id, max_agent, debug=False, have_env
     output = None
     if have_env_info:
         output = np.hstack((self_infos, env_infos, opp_infos, partner_infos))
+    elif noisy:
+        noisy_infos = []
+        for view in views:
+            noisy_info = np.random.uniform(0, 1, (3, 2 + view.shape[0] * 2))
+            noisy_infos.append(noisy_info.flatten())
+        noisy_infos = np.vstack(noisy_infos)
+        output = np.hstack((self_infos, opp_infos, partner_infos, noisy_infos))
     else:
         output = np.hstack((self_infos, opp_infos, partner_infos))
     return output
@@ -79,12 +90,13 @@ obs_input = obs_info_extract
 
 class MagentEnv:
     def __init__(self, agent_num=20, map_size=15, id_set=[0, 1], shift_delta=0, max_step=100, 
-                    have_env_info=False, opp_policy_random=True, distance_sort=False):
+                    have_env_info=False, opp_policy_random=True, distance_sort=False, noisy_info=False):
         self.agent_num = agent_num
 
         magent.utility.init_logger('battle')
         self.env = magent.GridWorld("battle", map_size=map_size)
         self.env.set_render_dir("../../data/render/render_" + time.strftime('%Y%m%d%H%M%S', time.localtime()))
+        # self.env.set_render_dir("render_" + time.strftime('%Y%m%d%H%M%S', time.localtime()))
         self.handles = self.env.get_handles()
 
         self.map_size = map_size
@@ -96,6 +108,8 @@ class MagentEnv:
         self.shift_delta = shift_delta
         self.opp_policy_random = opp_policy_random
         self.distance_sort = distance_sort
+
+        self.noisy_info = noisy_info
 
         # i取值((map_size - 1)/2 - 5, (map_size - 1)/2)
         # (4-5, 4+5)
@@ -126,7 +140,7 @@ class MagentEnv:
         if self.distance_sort:
             obs.append(self.obs_sort_by_distance(obs_input(views, features, 0, self.agent_num, have_env_info=self.have_env_info)))
         else:
-            obs.append(obs_input(views, features, 0, self.agent_num, have_env_info=self.have_env_info))
+            obs.append(obs_input(views, features, 0, self.agent_num, have_env_info=self.have_env_info, noisy=self.noisy_info))
 
         if self.opp_policy_random:
             opp_obs = self.env.get_observation(self.handles[1])
@@ -137,7 +151,7 @@ class MagentEnv:
                 obs.append(
                     self.obs_sort_by_distance(obs_input(views, features, 1, self.agent_num, have_env_info=self.have_env_info)))
             else:
-                obs.append(obs_input(views, features, 1, self.agent_num, have_env_info=self.have_env_info))
+                obs.append(obs_input(views, features, 1, self.agent_num, have_env_info=self.have_env_info, noisy= self.noisy_info))
         return obs
 
     def get_group_agent_id(self, group_id):
@@ -300,17 +314,21 @@ class MagentEnv:
     
     @property
     def observation_space(self):
-        self_info_space = self.env.get_feature_space(self.handles[0])[0] + 3 # 血量, group, minimap size: 34 + 3 = 37
+        self_info_space = self.env.get_feature_space(self.handles[0])[0] + 2 # 血量, group, minimap(去掉) size: 34 + 2 = 36
         env_info_space = 0
         if self.have_env_info:
             env_info_space = self.env.get_view_space(self.handles[0])[0]**2
+
+        noisy_info_space = 0
+        if self.noisy_info:
+            noisy_info_space = 28 * 3
         
         other_agent_info_space = 28 * (self.agent_num * 2 - 1) # size: 28 * 9 = 252
-        return spaces.Box(low=0, high=1, shape=(self_info_space + env_info_space + other_agent_info_space, ), dtype=np.float32)
+        return spaces.Box(low=0, high=1, shape=(self_info_space + env_info_space + other_agent_info_space + noisy_info_space, ), dtype=np.float32)
 
 
 if __name__ == '__main__':
-    env = MagentEnv()
+    env = MagentEnv(noisy_info=True)
     print('action space: ', env.action_space.n)
     print('obs space: ', env.observation_space.shape[0])
     obs = env.reset()

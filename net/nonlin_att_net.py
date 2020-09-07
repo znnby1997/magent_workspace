@@ -15,7 +15,7 @@ class NonlinAttNet(BasicNet):
 
         self.mlp2 = nn.Linear(hidden_dim, hidden_dim)
 
-    def att_layer(self, x):
+    def att_layer(self, x, greedy_group=False):
         att_output = None
         if self.nonlin == 'softmax':
             self.att_weight = f.softmax(self.att_layer(x), dim=1)

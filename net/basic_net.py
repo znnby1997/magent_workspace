@@ -12,6 +12,8 @@ class BasicNet(nn.Module):
         self.em_dim = em_dim
         self.att_weight = None
 
+        # weight直接乘在观测上中间层网络维度obs_dim
+        self.basic_mlp1 = nn.Linear(self.obs_dim, self.hidden_dim)
         # 基本的网络中包含一层MLP，用于处理第一层的输出embedding
         self.basic_mlp2 = nn.Linear(self.hidden_dim, self.n_actions)
 
@@ -23,14 +25,17 @@ class BasicNet(nn.Module):
     def forward(self):
         raise NotImplementedError
 
-    def att_layer(self, x):
+    def att_layer(self, x, greedy_group=False):
         # 该部分每个网络继承basic net时需要重写
         return
 
-    def q(self, obs):
-        att_output = self.att_layer(obs)
+    def q(self, obs, greedy_group=False):
+        att_output = self.att_layer(obs, greedy_group)
         return self.basic_mlp2(att_output)
 
-    def get_cur_weight(self):
-        return self.att_weight.detach().numpy()
+    # def get_cur_weight(self):
+    #     return self.att_weight.detach().numpy()
+
+    def get_mask(self):
+        return
 

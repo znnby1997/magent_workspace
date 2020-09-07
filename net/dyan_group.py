@@ -9,30 +9,41 @@ from net.basic_net import BasicNet
 
 class DyanGroup(BasicNet):
     def __init__(self, obs_dim, n_actions, hidden_dim, agent_num, em_dim=32, aggregate_form='mean', **kwargs):
-        super().__init__(obs_dim, n_actions, hidden_dim, em_dim)
-        self.feature_encoder = nn.Linear(28, hidden_dim)
-        self.self_encoder = nn.Linear(37, hidden_dim)
-        self.align_embedding = nn.Linear(2 * hidden_dim, hidden_dim)
+        # super().__init__(obs_dim, n_actions, hidden_dim, em_dim)
+        super(DyanGroup, self).__init__(obs_dim, n_actions, hidden_dim, em_dim)
+        self.align_embedding = nn.Linear(4 * em_dim, hidden_dim)
         self.aggregate_form = aggregate_form
         self.agent_num = agent_num
         # self.att_weight = [0.9, 0.1, 0.05, 0.9, 0.1, 0.05]
 
-    def att_layer(self, x):
+    def get_group_mask(self, batch):
+        group_mask = torch.zeros(4, self.agent_num * 2 - 1).cuda()
+        cur_idx = 0
+        for i in range(4):
+            for j in range(10):
+                if cur_idx < self.agent_num * 2 - 1:
+                    group_mask[i][cur_idx] = 1.0 - (i + cur_idx) * 0.02438
+                    cur_idx += 1
+                else:
+                    break
+        return group_mask.repeat(batch, 1, 1)
+
+    def att_layer(self, x, greedy_group=False):
         # 输入的观测已经按距离排好序了(由近及远)
         # agent观测信息,按距离由近及远分,一个组5个信息向量
-        opp_groups, partner_groups = self.get_info_vectors(x)
+        # 1.为每个info_vector编码
         self_info = x[:, 0:37]
-        opp_embeddings = self.aggregate_vector(opp_groups)
-        partner_embeddings = self.aggregate_vector(partner_groups)
-        self_embedding = f.relu(self.self_encoder(self_info)) # size: [batch, hidden]
-        # embedding = opp_embeddings + partner_embeddings # size: [6 batch * hidden_dim]
-        # embedding.append(self_embedding)
-        other_info = torch.stack(opp_embeddings + partner_embeddings) # size: [6 * batch * hidden]
-        self.att_weight = torch.tensor([0.9, 0.1, 0.05, 0.9, 0.1, 0.05], dtype=torch.float).cuda().reshape(1, -1) # size: 1 * 6
-        other_embedding = torch.matmul(self.att_weight, other_info.permute(1, 0, 2)).squeeze(1) # size: [batch, hidden]
-        embedding = torch.cat([other_embedding, self_embedding], dim=1) # size: [batch, 2 * hidden]
-        # embedding = torch.cat(embedding, dim=1) # size: [batch, 7 * hidden_dim]
-        att_output = f.relu(self.align_embedding(embedding)) # size: [batch, hidden]
+        other_info = x[:, 37:]
+        agents_info = torch.stack(other_info.split(28, dim=1)) # size: [other agents num, batch, 28]
+        other_embedding = f.relu(self.other_encoder(agents_info)) # size: [other agents num, batch, em_dim]
+        self_embedding = f.relu(self.self_encoder(self_info)) # size: [batch, em_dim]
+        # 2.分组实际上就是定义一个mask矩阵，矩阵的size [batch, group_num, other agents_num]
+        group_mask = self.get_group_mask(x.shape[0])
+        # 3.分组聚合
+        group_embeddings = torch.bmm(group_mask, other_embedding.permute(1, 0, 2)) # size: [batch, group_num, em_dim]
+        # 4.组间拼接
+        embeddings = group_embeddings.view(group_embeddings.shape[0], -1) # size: [batch, group_num * em_dim]
+        att_output = f.relu(self.align_embedding(embeddings)) # size: [batch, hidden]
         return att_output
             
 
@@ -41,15 +52,13 @@ class DyanGroup(BasicNet):
         opps_info = x[:, 37:opp_index].split(28, dim=1) # 20 agents
         partners_info = x[:, opp_index:].split(28, dim=1) # 19 agents
         
-        opp_groups = []
-        partner_groups = []
-        opp_groups.append(torch.stack(opps_info[:5])) # size: 5 * batch * 28
-        opp_groups.append(torch.stack(opps_info[5:10]))
-        opp_groups.append(torch.stack(opps_info[10:]))
+        groups = []
+        groups.append(torch.stack(opps_info[:10])) # size: 10 agents * batch * 28
+        groups.append(torch.stack(opps_info[10:])) # size: 10 agents * batch * 28
         
-        partner_groups.append(torch.stack(partners_info[:5]))
-        partner_groups.append(torch.stack(partners_info[5:10]))
-        partner_groups.append(torch.stack(partners_info[10:]))
+        groups.append(torch.stack(partners_info[:10])) # size: 10 agents * batch * 28
+        groups.append(torch.stack(partners_info[10:])) # size: 9 agents * batch * 28
+
         return opp_groups, partner_groups
 
     def aggregate_vector(self, groups):

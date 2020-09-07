@@ -20,7 +20,7 @@ def get_csv(csv_url, data_dict):
         df = pd.read_csv(csv_url)
     else:
         df = pd.DataFrame()
-        df['episode'] = [i for i in range(df.shape[0])]
+        df['epoch'] = [i for i in range(df.shape[0])]
     for key, value in zip(data_dict.keys(), data_dict.values()):
         df[key] = value
     df.to_csv(csv_url, index=False)
@@ -52,42 +52,40 @@ def smoothing(y_vals, w=0.99):
         last_val = smooth_val
     return smoothed
 
-def get_curve(path_url, model_set, y_label='win_rate', save_url='test.png'):
-    for model_name in model_set:
-        data1 = pd.read_csv(path_url + 'iql_' + model_name + '_10_seed1.csv')
-        seed1 = data1['seed(1)' + y_label].values
-        data2 = pd.read_csv(path_url + 'iql_' + model_name + '_10_seed2.csv')
-        seed2 = data2['seed(2)' + y_label].values
-        data3 = pd.read_csv(path_url + 'iql_' + model_name + '_10_seed3.csv')
-        seed3 = data3['seed(3)' + y_label].values
-        data4 = pd.read_csv(path_url + 'iql_' + model_name + '_10_seed4.csv')
-        seed4 = data4['seed(4)' + y_label].values
+def get_curve(path_url, model_dict: dict, y_label='kill_num', save_url='baseline_total_reward1.png', epoch_num=100):
+    index = np.array([j for j in range(epoch_num)])
+    for model, seeds_data in zip(model_dict.keys(), model_dict.values()):
+        seeds = []
+        for i in range(5):
+            seed_url = path_url + seeds_data[i]
+            seed_data = pd.read_csv(seed_url)
+            seed_data = seed_data['seed(' + str(i) + ')' + y_label].values
+            seeds.append(seed_data)
+
         max_values = []
         mean_values = []
         min_values = []
-        index = data1['episode'].values
 
-        for s1, s2, s3, s4 in zip(seed1, seed2, seed3, seed4):
-            max_values.append(max(s1, s2, s3, s4))
-            mean_values.append(sum([s1, s2, s3, s4]) / 4)
-            min_values.append(min(s1, s2, s3, s4))
+        for s0, s1, s2, s3, s4 in zip(seeds[0], seeds[1], seeds[2], seeds[3], seeds[4]):
+            max_values.append(max(s0, s1, s2, s3, s4))
+            mean_values.append(sum([s0, s1, s2, s3, s4]) / 5)
+            min_values.append(min(s0, s1, s2, s3, s4))
 
-        if y_label == 'total_reward':
-            max_values = smoothing(max_values)
-            mean_values = smoothing(mean_values)
-            min_values = smoothing(min_values)
+        max_smooth_vals = smoothing(max_values)
+        mean_smooth_vals = smoothing(mean_values)
+        min_smooth_vals = smoothing(min_values)
 
         x_smooth = np.linspace(index.min(), index.max(), 300)
-        y_smooth1 = make_interp_spline(index, max_values)(x_smooth)
-        y_smooth2 = make_interp_spline(index, mean_values)(x_smooth)
+        y_smooth1 = make_interp_spline(index, max_smooth_vals)(x_smooth)
+        y_smooth2 = make_interp_spline(index, mean_smooth_vals)(x_smooth)
         # y_smooth4 = make_interp_spline(index, smoothed)(x_smooth)
-        y_smooth3 = make_interp_spline(index, min_values)(x_smooth)
+        y_smooth3 = make_interp_spline(index, min_smooth_vals)(x_smooth)
         # plt.plot(x_smooth, y_smooth1)
-        plt.plot(x_smooth, y_smooth2, label=model_name)
+        plt.plot(x_smooth, y_smooth2, label=model)
         # plt.plot(x_smooth, y_smooth3)
         plt.fill_between(x_smooth, y_smooth1, y_smooth3, alpha=0.2)
 
-    plt.xlabel('episode')
+    plt.xlabel('epoch')
     plt.ylabel(y_label)
     plt.legend()
     plt.savefig(save_url)
