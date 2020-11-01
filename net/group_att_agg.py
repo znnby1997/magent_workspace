@@ -3,30 +3,45 @@ import torch.nn as nn
 import torch.nn.functional as f
 import numpy as np
 
-import sys
-sys.path.append('..')
-from net.basic_net import BasicNet
-import utils.misc as misc
-
-class GAA(BasicNet):
-    def __init__(self, obs_dim, n_actions, hidden_dim, agent_num, group_num, em_dim=32, aggregate_form='mean', **kwargs):
-        super().__init__(obs_dim, n_actions, hidden_dim, em_dim)
-        self.align_embedding = nn.Linear(3 * em_dim, hidden_dim)
-
-        self.gru = nn.GRU(input_size=em_dim, hidden_size=em_dim, bidirectional=True)
-        self.group_layer = nn.Linear(2 * em_dim, group_num)
+class GAA(nn.Module):
+    def __init__(self, obs_dim, n_actions, hidden_dim, agent_num, group_num, aggregate_form='mean', **kwargs):
+        super(GAA, self).__init__()
+        self.align_embedding = nn.Linear(2 * hidden_dim, hidden_dim)
 
         self.fc_group_layer = nn.Linear(28, group_num) # 直接在原始观测上进行分组
 
-        self.trans_w1 = nn.Linear(em_dim, em_dim)
-        self.trans_w2 = nn.Linear(em_dim, 1)
+        self.obs_encoder = nn.Linear(28, hidden_dim)
+        self.self_info_encoder = nn.Linear(36, hidden_dim)
+
+        self.trans_w1 = nn.Linear(hidden_dim, hidden_dim)
+        self.trans_w2 = nn.Linear(hidden_dim, 1)
         
         self.aggregate_form = aggregate_form
         self.agent_num = agent_num
         self.group_num = group_num
-        self.tau = 0.0
         
         self.group_mask = None
+
+    def forward(self, x, detach=False, **kwargs):
+        self_info = x[:, 0:36]
+        self_e = f.relu(self.self_info_encoder(self_info))
+        other_info = x[:, 36:]
+        agents_info = torch.stack(other_info.split(28, dim=1)) # size: [other agents num, batch, 28]
+        info_encoders = f.relu(self.obs_encoder(agents_info)) # size: [other agents num, batch, hidden_dim]
+        
+        group_output = self.fc_group_layer(agents_info) # size: [other agents num, batch, group_num]
+        if detach:
+            group_probs = f.softmax(group_output, dim=2)
+            self.group_mask = self.get_greedy_group(group_probs)
+        else:
+            self.group_mask = f.gumbel_softmax(group_probs, 1.0, hard=True, dim=2) # size: [other agents num, batch, group num] one-hot
+
+        # 组内聚合
+        group_es = torch.bmm(self.group_mask.permute(1, 2, 0), info_encoders.permute(1, 0, 2)) # size:[batch, group, hidden_dim]
+        group_att = f.softmax(self.trans_w2(torch.tanh(self.trans_w1(group_es))), dim=1) # size: [batch, group, 1]
+        other_embedding = torch.bmm(group_att.permute(0, 2, 1), group_es).squeeze(1) # size: [batch, hidden_dim]
+        obs_embedding = torch.cat([other_embedding, self_e], dim=1) # size: [batch, hidden_dim * 2]
+        return self.align_embedding(obs_embedding), (self.group_mask, group_att)
     
     @staticmethod
     def get_greedy_group(group_probs):
@@ -34,74 +49,83 @@ class GAA(BasicNet):
         mask = torch.zeros(group_probs.shape, dtype=torch.float).cuda()
         return mask.scatter_(2, index=max_idx.unsqueeze(2).long(), value=1)
 
-    def att_layer(self, x, greedy_group=False):
-        # 1.每个info向量进行编码
-        # self_info = x[:, 0:37]
-        # other_info = x[:, 37:]
-        # agents_info = torch.stack(other_info.split(28, dim=1)) # size: [other agents num, batch, 28]
-        # other_embedding = f.relu(self.other_encoder(agents_info)) # size: [other agents num, batch, em_dim]
-        # self_embedding = f.relu(self.self_encoder(self_info)) # size: [batch, em_dim]
-        # encodings = torch.cat([self_embedding.unsqueeze(0), other_embedding], dim=0) # size: [agents num, batch, em_dim]
-        self_info = x[:, 0:37]
-        opp_index = 37 + 28 * self.agent_num
-        opps_info = torch.stack(x[:, 37:opp_index].split(28, dim=1)) # 20 agents size: [20, batch, 28]
-        partners_info = torch.stack(x[:, opp_index:].split(28, dim=1)) # 19 agents size: [19, batch, 28]
-        self_embedding = f.relu(self.self_encoder(self_info)) # size: [batch, em_dim]
-        opps_embedding = f.relu(self.other_encoder(opps_info)) # size: [20, batch, em_dim]
-        partners_embedding = f.relu(self.other_encoder(partners_info)) # size: [19, batch, em_dim]
-
-        # 生成分组分布并采样
-        opp_group_mask = None
-        par_group_mask = None
-        if not greedy_group:
-            opp_group_mask = f.gumbel_softmax(self.fc_group_layer(opps_info), 1.0, hard=True, dim=2) # size: [20, batch, group num] one-hot
-            par_group_mask = f.gumbel_softmax(self.fc_group_layer(partners_info), 1.0, hard=True, dim=2)
-        else:
-            opp_group_probs = f.softmax(self.fc_group_layer(opps_info), dim=2)
-            par_group_probs = f.softmax(self.fc_group_layer(partners_info), dim=2)
-            opp_group_mask = self.get_greedy_group(opp_group_probs)
-            par_group_mask = self.get_greedy_group(par_group_probs)
-
-        self.group_mask = (opp_group_mask.squeeze(), par_group_mask.squeeze())
-            
-        # 组内聚合(这里分组聚合应该使用原始观测)
-        opp_group_embeddings = torch.bmm(opp_group_mask.permute(1, 2, 0), opps_embedding.permute(1, 0, 2)) # size:[batch, group, em_dim]
-        par_group_embeddings = torch.bmm(par_group_mask.permute(1, 2, 0), partners_embedding.permute(1, 0, 2))
-        opp_group_att = f.softmax(self.trans_w2(torch.tanh(self.trans_w1(opp_group_embeddings))), dim=1) # size: [batch, group, 1]
-        par_group_att = f.softmax(self.trans_w2(torch.tanh(self.trans_w1(par_group_embeddings))), dim=1) # size: [batch, group, 1]
-        
-        self.att_weight = (opp_group_att.squeeze(), par_group_att.squeeze())
-        
-        opp_embedding = torch.bmm(opp_group_att.permute(0, 2, 1), opp_group_embeddings).squeeze(1) # size: [batch, em_dim]
-        par_embedding = torch.bmm(par_group_att.permute(0, 2, 1), par_group_embeddings).squeeze(1)
-        embedding = torch.cat([opp_embedding, par_embedding, self_embedding], dim=1) # size: [batch, 3 * em_dim]
-        # 2.对每个other agent观测信息进行分组并依据attention进行聚合
-        # gru_output, _ = self.gru(encodings) # gru_output size: [agent_num, batch, em_dim*2]
-        # att_logit = None
-        # if not self.group_greedy:
-        #     # 下面这两步是有问题的，因为两次的gumbel sample是不同的 ????????
-        #     self.tau -= 0.
-        #     group_mask = f.gumbel_softmax(self.group_layer(gru_output[1:]), 1.0, hard=True, dim=2) # size: [other agent_num, batch, group_num] dim=2 is one-hot
-        #     # sample = f.gumbel_softmax(self.group_layer(gru_output[1:]), 1.0, hard=False, dim=2)
-        #     # 这里使用分入一组的sample值作为权重logit
-        #     # att_logit = sample * group_mask # size: [other agent_num, batch, group_num]
-        #     att_logit = group_mask
-        # else:
-        #     group_probs = f.softmax(self.group_layer(gru_output[1:]), dim=2) # size: [other agent_num, batch, group_num]
-        #     max_val, max_idx = torch.max(group_probs, dim=2)
-        #     mask = torch.zeros(group_probs.shape, dtype=torch.float).cuda()
-        #     att_logit = mask.scatter_(2, index=max_idx.unsqueeze(2).long(), src=max_val.unsqueeze(2).float())
-        # agent_level_att = f.softmax(att_logit, dim=0)
-        # 组内聚合
-        # group_level_embeddings = torch.bmm(att_logit.permute(1, 2, 0), other_embedding.permute(1, 0, 2)) # size: [batch, group, em_dim]
-        # group_level_att = f.softmax(self.trans_w2(torch.tanh(self.trans_w1(group_level_embeddings))), dim=1) # size: [batch, group, 1]
-        # other_embeddings = torch.bmm(group_level_att.permute(0, 2, 1), group_level_embeddings).squeeze(1) # size: [batch, em_dim]
-
-        # self.att_weight = (agent_level_att, group_level_att)
-
-        # 3.将self info以及其他agent的观测聚合信息拼接
-        # embedding = torch.cat([self_embedding, other_embeddings], dim=1) # size: [batch, em_dim * 2]
-        return f.relu(self.align_embedding(embedding)) # size: [batch, hidden]
-
     def get_mask(self):
         return self.group_mask
+
+
+class GroupNet(nn.Module):
+    """
+        大致过程：
+            1.分组：输出分组矩阵(目前想到的分组算法，有监督的knn以及无监督的kmeans)
+            2.learning的过程实际上是决定哪些group的信息不需要reduce(需要重点关注)，哪些信息需要reduce(知道个大概即可)
+            3.最后应该是group拼接(包括自身信息)
+    """
+    def __init__(self, obs_dim, n_actions, hidden_dim, agent_num, group_num, aggregate_form='mean', **kwargs):
+        super(GroupNet, self).__init__()
+
+        self.i_group_num = group_num[0]
+        self.o_group_num = group_num[1]
+        self.group_num = self.i_group_num + self.o_group_num
+
+        self.group_layer = nn.Sequential(
+            nn.Linear(28, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, self.group_num)
+        )
+
+        self.other_info_num = 2 * agent_num - 1 + 3
+        self.align_layer = nn.Linear(36 + self.i_group_num * self.other_info_num * 28 + self.o_group_num * 28, hidden_dim)
+
+    """
+        B - batch_size, n1 - important group num, n2 - other group num, N - other agent num, H - hidden_dim
+        other_agent_info: o_matrix(size: [B, N, H])
+        实现过程:
+            1.分组矩阵G，目前最简单的方式是直接将观测输入网络中输出一个group mask, 划分为igroup_mask(size: [B, n1, N]), ogroup_mask(size: [B, n2, N])
+            2.聚合other groups内的观测信息: o_group_e = ogroup_mask * o_matrix (size: [B, n2, H]) (矩阵乘法)
+            3.提取important groups内的观测信息: i_group_info = igroup_mask(size: [B, n1, N, 1]) * o_matrix(repeat, size: [B, n1, N, H]) (哈达玛积)(size: [B, n1, N, H])
+            4.拼接所有group的features reshape(batch, -1)
+    """
+    def forward(self, x, detach=False, group_matrix=None, **kwargs):
+        self_info = x[:, 0:36]
+        other_info = x[:, 36:]
+        batch = self_info.shape[0]
+        o_matrix = torch.stack(other_info.split(28, dim=1)).permute(1, 0, 2) # size: [batch, other agents num, 28]
+
+        # step 1
+        split_policy = [self.i_group_num, self.o_group_num]
+        group_masks = self.get_group(o_matrix, detach).split(split_policy, dim=1)
+        igroup_mask = group_masks[0] # size: [batch, igroup num, other agents num]
+        ogroup_mask = group_masks[1] # size: [batch, ogroup num, other agents num]
+
+        # step 2
+        ogroup_em = torch.bmm(ogroup_mask, o_matrix) # size:[batch, ogroup num, 28]
+
+        # step 3
+        igroup_em = igroup_mask.unsqueeze(3) * (o_matrix.unsqueeze(1).repeat(1, self.i_group_num, 1, 1)) # size: [batch, igroup num, other agents num, 28]
+
+        # step 4
+        em = torch.cat([self_info, igroup_em.reshape(batch, -1), ogroup_em.reshape(batch, -1)], dim=1) # size: [batch, 36 + igroup num * other agents num * 28 + ogroup num * 28]
+        return self.align_layer(em), group_masks
+
+    def get_group(self, o, detach):
+        group_output = self.group_layer(o) # size: [batch, agent num, group num]
+        if detach:
+            # 采样
+            group_probs = f.softmax(group_output, dim=2)
+            group_mask = self.get_greedy_group(group_output).permute(0, 2, 1)
+        else:
+            # gumbel trick
+            group_mask = f.gumbel_softmax(group_output, 1.0, hard=True, dim=2).permute(0, 2, 1)
+        return group_mask # size: [batch, group num, agent_num] one-hot
+    
+    @staticmethod
+    def get_greedy_group(group_probs):
+        max_val, max_idx = torch.max(group_probs, dim=2)
+        mask = torch.zeros(group_probs.shape, dtype=torch.float).cuda()
+        return mask.scatter_(2, index=max_idx.unsqueeze(2).long(), value=1)
+
+        
+
+
+
+

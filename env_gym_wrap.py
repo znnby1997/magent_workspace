@@ -35,7 +35,7 @@ def obs_info_extract(views, features, group_id, max_agent, debug=False, have_env
     # 提取自身观测信息向量
     for view, feature in zip(views, features):
         self_view_vector = view[6][6] # 13*13观测视角中, 自身观测在中间位置
-        self_view_info = np.stack([self_view_vector[2], group_id]) # 血量、group
+        self_view_info = np.stack([self_view_vector[2], group_id]) # 血量、group minimap(去掉)
         self_info = np.append(feature, self_view_info)
         self_infos.append(self_info)
 
@@ -136,22 +136,22 @@ class MagentEnv:
         obs = []
         # 得到活着的agent的id
         agents_id = self.get_group_agent_id(0)
+
+        # handles[0]实际上是最后训练出来的对手的观测,既不需要排序也不需要噪声
         views, features = self.env.get_observation(self.handles[0])
-        if self.distance_sort:
-            obs.append(self.obs_sort_by_distance(obs_input(views, features, 0, self.agent_num, have_env_info=self.have_env_info)))
-        else:
-            obs.append(obs_input(views, features, 0, self.agent_num, have_env_info=self.have_env_info, noisy=self.noisy_info))
+        obs.append(obs_input(views, features, 0, self.agent_num, have_env_info=self.have_env_info))
 
         if self.opp_policy_random:
             opp_obs = self.env.get_observation(self.handles[1])
             obs.append(opp_obs)
         else:
+            # 真正的训练模型使用的观测，可以包含排序以及噪声
             views, features = self.env.get_observation(self.handles[1])
             if self.distance_sort:
                 obs.append(
                     self.obs_sort_by_distance(obs_input(views, features, 1, self.agent_num, have_env_info=self.have_env_info)))
             else:
-                obs.append(obs_input(views, features, 1, self.agent_num, have_env_info=self.have_env_info, noisy= self.noisy_info))
+                obs.append(obs_input(views, features, 1, self.agent_num, have_env_info=self.have_env_info, noisy=self.noisy_info))
         return obs
 
     def get_group_agent_id(self, group_id):
@@ -261,12 +261,12 @@ class MagentEnv:
         return live
 
     def obs_sort_by_distance(self, group_original_obs):
-        # 前37个为自身信息
+        # 前36个为自身信息
         ans = []
         for original_obs in group_original_obs:
-            ans_ = original_obs[:37]
-            opp_index = 37 + 28 * self.agent_num
-            opps_info = np.hsplit(original_obs[37:opp_index], 20) # 20 agents
+            ans_ = original_obs[:36]
+            opp_index = 36 + 28 * self.agent_num
+            opps_info = np.hsplit(original_obs[36:opp_index], 20) # 20 agents
             partners_info = np.hsplit(original_obs[opp_index:], 19) # 19 agents
 
             opps = []
@@ -314,7 +314,7 @@ class MagentEnv:
     
     @property
     def observation_space(self):
-        self_info_space = self.env.get_feature_space(self.handles[0])[0] + 2 # 血量, group, minimap(去掉) size: 34 + 2 = 36
+        self_info_space = self.env.get_feature_space(self.handles[0])[0] + 2 # 血量, group, minimap size: 34 + 2 = 36
         env_info_space = 0
         if self.have_env_info:
             env_info_space = self.env.get_view_space(self.handles[0])[0]**2

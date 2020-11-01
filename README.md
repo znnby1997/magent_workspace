@@ -1,2 +1,2 @@
 # magent_workspace
- experiment on the magent environment
+ multi-agent experiment in magent env
