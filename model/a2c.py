@@ -169,25 +169,57 @@ def compute_target(v_final, r_lst, mask_lst):
 
     return torch.tensor(td_target[::-1]).float()
 
-def learn(model, s_prime, a_lst, s_lst, r_lst, mask_lst, optimizer, entropy_w):
+def learn_a2c(model, s_prime, a_lst, s_lst, r_lst, mask_lst, optimizer, entropy_w, print_log=False):
+    # s_final = torch.from_numpy(s_prime).cuda().float()
+    # v_final = model.v(s_final)[0].detach().clone().cpu().numpy()
+    # td_target = compute_target(v_final, r_lst, mask_lst)
+
+    # td_target_vec = td_target.reshape(-1).cuda()
+    # s_vec = torch.tensor(s_lst).float().cuda().reshape(-1, model.obs_dim)
+    # a_vec = torch.tensor(a_lst).cuda().reshape(-1).unsqueeze(1)
+    # print('td_target_vec shape: ', td_target_vec.shape, ' model output shape: ', model.v(s_vec)[0].reshape(-1).shape)
+    # advantage  = td_target_vec - model.v(s_vec)[0].reshape(-1)
+
+    # pi, _ = model.pi(s_vec)
+    # pi_a = pi.gather(1, a_vec).reshape(-1)
+    # entropy = Categorical(pi).entropy()
+
+    # loss = -(torch.log(pi_a) * advantage.detach()) + F.smooth_l1_loss(model.v(s_vec)[0].reshape(-1), td_target_vec) - entropy_w * entropy
+
+    # optimizer.zero_grad()
+    # loss.mean().backward()
+    # optimizer.step()
+
     s_final = torch.from_numpy(s_prime).cuda().float()
-    v_final = model.v(s_final)[0].detach().clone().cpu().numpy()
+    # print('s_final shape for train v: ', s_final.shape)
+    v_final = model.v(s_final.reshape(1, -1))[0].detach().clone().cpu().numpy()
     td_target = compute_target(v_final, r_lst, mask_lst)
 
     td_target_vec = td_target.reshape(-1).cuda()
     s_vec = torch.tensor(s_lst).float().cuda().reshape(-1, model.obs_dim)
     a_vec = torch.tensor(a_lst).cuda().reshape(-1).unsqueeze(1)
-    print('td_target_vec shape: ', td_target_vec.shape, ' model output shape: ', model.v(s_vec)[0].reshape(-1).shape)
+    # print('td_target_vec shape: ', td_target_vec.shape, ' model output shape: ', model.v(s_vec)[0].reshape(-1).shape)
+    # print('s_vec shape for train v:', s_vec.shape)
     advantage  = td_target_vec - model.v(s_vec)[0].reshape(-1)
 
     pi, _ = model.pi(s_vec)
     pi_a = pi.gather(1, a_vec).reshape(-1)
     entropy = Categorical(pi).entropy()
 
-    loss = -(torch.log(pi_a) * advantage.detach()) + F.smooth_l1_loss(model.v(s_vec)[0].reshape(-1), td_target_vec) - entropy_w * entropy
+    actor_loss = torch.log(pi_a + 1e-8) * advantage.detach()
+    critic_loss = F.smooth_l1_loss(model.v(s_vec)[0].reshape(-1), td_target_vec)
+
+    loss = -actor_loss + critic_loss - entropy_w * entropy
 
     optimizer.zero_grad()
     loss.mean().backward()
     optimizer.step()
+
+    if print_log:
+        return loss.mean(), actor_loss.mean(), critic_loss.mean(), entropy.mean()
+    else:
+        return 0., 0., 0., 0.
+
+    
 
     

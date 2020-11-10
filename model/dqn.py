@@ -52,8 +52,8 @@ class ReplayBufferM():
             done_mask_lst.append([done_mask])
 
         return torch.tensor(s_lst, dtype=torch.float).cuda(), torch.tensor(a_lst).cuda(), \
-               torch.tensor(r_lst).cuda(), torch.tensor(s_prime_lst, dtype=torch.float).cuda(), \
-               torch.tensor(done_mask_lst).cuda()
+               torch.tensor(r_lst, dtype=torch.float).cuda(), torch.tensor(s_prime_lst, dtype=torch.float).cuda(), \
+               torch.tensor(done_mask_lst, dtype=torch.float).cuda()
     
     def size(self):
         return len(self.buffer)

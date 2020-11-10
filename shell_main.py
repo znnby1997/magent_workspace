@@ -37,7 +37,8 @@ if __name__ == '__main__':
     parse.add_argument('--update_net', type=int, default=1)
     parse.add_argument('--update_model_rate', type=int, default=100)
     parse.add_argument('--opp_policy', type=str, default=None)
-    parse.add_argument('--group_num', nargs='+', type=int)
+    # parse.add_argument('--group_num', nargs='+', type=int)
+    parse.add_argument('--group_num', type=int, default=1)
 
     parse.add_argument('--gamma', type=float, default=0.98)
     parse.add_argument('--batch_size', type=int, default=5000)
@@ -68,6 +69,13 @@ if __name__ == '__main__':
     parse.add_argument('--max_train_steps', type=int, default=100000)
     parse.add_argument('--update_interval', type=int, default=5)
     parse.add_argument('--test_rate', type=int, default=100)
+    parse.add_argument('--print_log', type=int, default=0)
+
+    parse.add_argument('--k_epoch', type=int, default=3)
+    parse.add_argument('--lmbda', type=float, default=0.95)
+    parse.add_argument('--eps_clip', type=float, default=0.1)
+    parse.add_argument('--t_horizon', type=int, default=20)
+    parse.add_argument('--net_flag', type=str, default='none')
 
     args = parse.parse_args()
     agent_num = args.agent_num
@@ -98,7 +106,8 @@ if __name__ == '__main__':
     update_model_rate = args.update_model_rate
     print_info_rate = args.print_info_rate
     opp_policy = args.opp_policy
-    group_num = tuple(args.group_num)
+    # group_num = tuple(args.group_num)
+    group_num = args.group_num
 
     gamma = args.gamma
     batch_size = args.batch_size
@@ -129,6 +138,13 @@ if __name__ == '__main__':
     max_train_steps = args.max_train_steps
     update_interval = args.update_interval
     test_rate = args.test_rate
+    print_log = args.print_log
+
+    k_epoch = args.k_epoch
+    lmbda = args.lmbda
+    eps_clip = args.eps_clip
+    t_horizon = args.t_horizon
+    net_flag = args.net_flag
 
     print('current env info: ', 'GPU ', use_cuda, ' GPU id ', cuda_id)
 
@@ -137,7 +153,7 @@ if __name__ == '__main__':
     if test_model:
         env = MagentEnv(agent_num=agent_num, map_size=map_size, max_step=max_step, opp_policy_random=False, distance_sort=distance_sort, noisy_info=noisy)
         main.test_model(env, model=[opp_policy, test_model_url], episode_num=test_episode_num, render=render, 
-                print_group_mask=print_mask, csv_url=csv_url, save_data=save_data, seed=seed, print_info=print_info)
+                print_group_mask=print_mask, net_flag=net_flag, csv_url=csv_url, save_data=save_data, seed=seed, print_info=print_info)
     elif train_opp:
         env = MagentEnv(agent_num=agent_num, map_size=map_size, max_step=max_step, opp_policy_random=True, distance_sort=distance_sort, noisy_info=noisy)
         main.train_opp_policy(env, gamma, batch_size, capacity, learning_rate, hidden_dim, model_save_url, episode_num,
@@ -161,7 +177,13 @@ if __name__ == '__main__':
             agent_num=agent_num, opp_policy=opp_policy, model_save_url='../../data/a2c/model/', update_interval = update_interval,
             max_train_steps=max_train_steps, test_num=test_episode_num, test_rate=test_rate,  tensorboard_data='../../data/a2c/log/data_info_',
             save_data=save_data, csv_url='../../data/a2c/csv/', seed_flag=seed, nonlin=nonlin,
-            update_model_rate=update_model_rate, print_info_rate=print_info_rate, print_info=print_info, concatenation=concatenation, entr_w=beta)
+            update_model_rate=update_model_rate, print_info_rate=print_info_rate, print_info=print_info, concatenation=concatenation, entr_w=beta, print_log=print_log)
+    elif basic_model == 'ppo':
+        env = MagentEnv(agent_num=agent_num, map_size=map_size, max_step=max_step, opp_policy_random=False, distance_sort=distance_sort, noisy_info=noisy)
+        main.epoch_train_ppo(env, net_type, gamma=gamma, lr=learning_rate, hidden_dim=hidden_dim, aggregate_form=aggregate_form, group_num=group_num, agent_num=agent_num,
+            opp_policy=opp_policy, model_save_url='../../data/ppo/model/', episodes_per_epoch=episodes_per_epoch, episodes_per_test=episodes_per_test, epoch_num=epoch_num,
+            tensorboard_data='../../data/ppo/log/data_info_', save_data=save_data, csv_url='../../data/ppo/csv/', seed_flag=seed, nonlin=nonlin,
+            print_info_rate=print_info_rate, print_info=print_info, concatenation=concatenation, k_epoch=k_epoch, lmbda=lmbda, eps_clip=eps_clip, t_horizon=t_horizon, beta=beta, print_log=print_log)
     else:
         env = MagentEnv(agent_num=agent_num, map_size=map_size, max_step=max_step, opp_policy_random=False, distance_sort=distance_sort, noisy_info=noisy)
         main.train(env, net_type, gamma, batch_size, capacity, group_num, learning_rate, hidden_dim, nonlin, 

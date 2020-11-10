@@ -11,7 +11,8 @@ import random
 
 from model.opp_model import Qnet, ReplayBuffer, learn
 from model.dqn import QnetM, ReplayBufferM, learn_m
-from model.a2c import ActorCritic, ParallelEnv, learn
+from model.a2c import ActorCritic, ParallelEnv, learn_a2c
+from model.ppo import PPO, learn_ppo, DataSet
 from env_gym_wrap import MagentEnv
 from magent.builtin.rule_model import RandomActor
 import utils.data_process as dp
@@ -149,7 +150,7 @@ def test_opp(env: MagentEnv, model=None, episode_num=20, render=True):
     print('group2 -- ave total reward %0.2f kill num %0.2f survive num %0.2f' % (sum(total_reward_2_list) / episode_num, sum(kill_num_2_list) / episode_num, sum(survive_num_2_list) / episode_num))
     
 
-def test_model(env: MagentEnv, model=None, episode_num=20, render=True, print_att_weight=False, 
+def test_model(env: MagentEnv, model=None, episode_num=20, render=True, print_att_weight=False, net_flag='none',
                 print_group_mask=False, csv_url='../../data/csv/', seed=0, save_data=True, print_info=True):
     print('test env')
     agent_1 = torch.load(model[0])  # 对手的模型
@@ -221,6 +222,14 @@ def test_model(env: MagentEnv, model=None, episode_num=20, render=True, print_at
 
     print('Test is over. group1 ave total reward: %0.2f   group2 ave total reward: %0.2f   group1 ave kill: %0.2f   group2 ave kill: %0.2f   group1 ave survive: %0.2f   group2 ave survive: %0.2f' % (
             sum(total_reward_1_list) / episode_num, sum(total_reward_2_list) / episode_num, sum(kill_num_1_list) / episode_num, sum(kill_num_2_list) / episode_num, sum(survive_num_1_list) / episode_num, sum(survive_num_2_list) / episode_num))
+    # 最后一行统计平均每个episode的值
+    total_reward_1_list.append(sum(total_reward_1_list) / episode_num)
+    total_reward_2_list.append(sum(total_reward_2_list) / episode_num)
+    kill_num_1_list.append(sum(kill_num_1_list) / episode_num)
+    kill_num_2_list.append(sum(kill_num_2_list) / episode_num)
+    survive_num_1_list.append(sum(survive_num_1_list) / episode_num)
+    survive_num_2_list.append(sum(survive_num_2_list) / episode_num)
+    
     if save_data:
         print('saving data ...')
         data_dict = {}
@@ -231,7 +240,7 @@ def test_model(env: MagentEnv, model=None, episode_num=20, render=True, print_at
         data_dict[index + 'kill_num_2'] = kill_num_2_list 
         data_dict[index + 'survive_num_1'] = survive_num_1_list
         data_dict[index + 'survive_num_2'] = survive_num_2_list
-        dp.get_csv(csv_url + timestamp + '_' + str(seed) + '.csv', data_dict)
+        dp.get_csv(csv_url + net_flag + '_' + str(seed) + '.csv', data_dict)
         print('over !!')
 
 
@@ -372,19 +381,20 @@ def epoch_train(env: MagentEnv, net_type, gamma=0.98, batch_size=5000, capacity=
     writer.close()
 
     if save_data:
+        print('saving data ....')
         data_dict = {}
         index = 'seed(' + str(seed_flag) + ')'
         data_dict[index + 'total_reward'] = total_reward_list
         data_dict[index + 'kill_num'] = ave_kill_num_list
         data_dict[index + 'survive_num'] = ave_survive_num_list
-        dp.get_csv(csv_url + net_type + '_' + timestamp + '.csv', data_dict)
-
+        dp.get_csv(csv_url + net_type + '_' + timestamp + '_' + str(seed_flag) + '.csv', data_dict)
+        print('csv is saved.')
 
 def epoch_train_a2c(train_env: MagentEnv, test_env: MagentEnv, net_type, gamma=0.98, lr=1e-4, hidden_dim=32, aggregate_form='mean',
     agent_num=20, opp_policy=None, model_save_url='../../data/a2c/model/', update_interval = 5, group_num=3,
     max_train_steps=50000, test_num=20, test_rate=100,  tensorboard_data='../../data/a2c/log/data_info_',
     save_data=True, csv_url='../../data/a2c/csv/', seed_flag=1, nonlin='softmax',
-    update_model_rate=100, print_info_rate=20, print_info=True, concatenation=False, entr_w=0.02):
+    update_model_rate=100, print_info_rate=20, print_info=True, concatenation=False, entr_w=0.02, print_log=False):
     env_action_space = train_env.action_space.n
     env_obs_space = train_env.observation_space.shape[0]
     print('env_obs_space: ', env_obs_space)
@@ -406,6 +416,7 @@ def epoch_train_a2c(train_env: MagentEnv, test_env: MagentEnv, net_type, gamma=0
     writer = SummaryWriter(tensorboard_data + net_type + '_' + timestamp)
 
     step_idx = 0
+    train_step = 0
     obs = train_env.reset()
     epoch = 0
     while step_idx < max_train_steps:
@@ -427,7 +438,7 @@ def epoch_train_a2c(train_env: MagentEnv, test_env: MagentEnv, net_type, gamma=0
                 s_lst[id].append(o)
                 a_lst[id].append(a)
 
-            print('train_env done', train_env.done, ' test_env done', test_env.done)
+            # print('train_env done', train_env.done, ' test_env done', test_env.done)
             s_prime, r, done, info = train_env.step([group1_as, group2_as])
 
             alive_info = info['agent_live']
@@ -435,10 +446,9 @@ def epoch_train_a2c(train_env: MagentEnv, test_env: MagentEnv, net_type, gamma=0
 
             for id, alive_agent_id in enumerate(alive_agent_ids):
                 r_lst[alive_agent_id].append(r[1][alive_agent_id])
-                mask_lst[alive_agent_id].append(1 - alive_info[1][alive_agent_id])
+                mask_lst[alive_agent_id].append(alive_info[1][alive_agent_id])
 
             if done:
-                print('hhhhh')
                 s_prime = train_env.reset()
             
             obs = s_prime
@@ -446,56 +456,24 @@ def epoch_train_a2c(train_env: MagentEnv, test_env: MagentEnv, net_type, gamma=0
 
         # learning
         print('learning ...')
+        total_loss, actor_loss, critic_loss, entropy = [], [], [], []
         for o, id in zip(s_prime[1], alive_agent_ids):
-            print('agent ', id, ' alist len', len(a_lst[id]), ' slist len', len(s_lst[id]), ' rlist len', len(r_lst[id]), 'mask lst len', len(mask_lst[id]))
-            learn(agent_2, o, a_lst[id], s_lst[id], r_lst[id], mask_lst[id], optimizer, entr_w)
+            # print('agent ', id, ' alist len', len(a_lst[id]), ' slist len', len(s_lst[id]), ' rlist len', len(r_lst[id]), 'mask lst len', len(mask_lst[id]))
+            loss = learn_a2c(agent_2, o, a_lst[id], s_lst[id], r_lst[id], mask_lst[id], optimizer, entr_w, print_log)
+            total_loss.append(loss[0])
+            actor_loss.append(loss[1])
+            critic_loss.append(loss[2])
+            entropy.append(loss[3])
+        
+        if print_log:
+            writer.add_scalar('train_loss/total_loss', torch.mean(torch.tensor(total_loss).cuda().float()).cpu().numpy(), train_step)
+            writer.add_scalar('train_loss/actor_loss', torch.mean(torch.tensor(actor_loss).cuda().float()).cpu().numpy(), train_step)
+            writer.add_scalar('train_loss/critic_loss', torch.mean(torch.tensor(critic_loss).cuda().float()).cpu().numpy(), train_step)
+            writer.add_scalar('train_loss/entropy_loss', torch.mean(torch.tensor(entropy).cuda().float()).cpu().numpy(), train_step)
+            train_step += 1
 
         if step_idx % test_rate == 0:
-            print('step idx %d ... test stage starting ...' % step_idx)
-            total_kill_num = 0
-            total_survive_num = 0
-            total_reward = 0
-
-            for test_episode in range(test_num):
-                obs = test_env.reset(use_random_init=False)
-                done = False
-                alive_info = None
-
-                while not done:
-                    group1_as = []
-                    for o in obs[0]:
-                        group1_as.append(agent_1.sample_action(torch.from_numpy(o).cuda().float(), 0.01))
-
-                    group2_as = []
-                    mask_list = []
-                    for o in obs[1]:
-                        out = agent_2.pi(torch.from_numpy(o).cuda().float().reshape(1, -1), detach=True)
-                        a = Categorical(out[0]).sample().cpu().numpy()
-                        group2_as.append(a)
-                        mask_list.append(out[1])
-
-                    next_obs, rewards, done, alive_info = test_env.step([group1_as, group2_as])
-
-                    alive_info = alive_info['agent_live']
-                    alive_agent_ids = test_env.get_group_agent_id(1)
-                    cur_rewards = []
-                    for alive_agent_id in alive_agent_ids:
-                        cur_rewards.append(rewards[1][alive_agent_id])
-                    total_reward += sum(cur_rewards)
-
-                    if print_info and test_episode % print_info_rate == 0:
-                        print('step idx %d episode %d log -- ' % (step_idx, test_episode))
-                        print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), '\tgroup1 actions: ', group1_as)
-                        print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), '\tgroup2 actions: ', group2_as)
-                        print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), '\talive_info: ', alive_info)
-                        print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), '\trewards: ', rewards)
-                        print('mask log: ', mask_list)
-
-                    obs = next_obs
-
-                total_kill_num += np.sum(alive_info[0] == 0)
-                total_survive_num += np.sum(alive_info[1] != 0)
-                print('test ... step idx %d episode %d' % (step_idx, test_episode))
+            total_reward, total_kill_num, total_survive_num = a2c_test(step_idx, test_env, test_num, agent_1, agent_2, print_info, print_info_rate)
             
             epoch_total_reward = total_reward / test_num
             epoch_total_kill_num = total_kill_num / test_num
@@ -503,6 +481,7 @@ def epoch_train_a2c(train_env: MagentEnv, test_env: MagentEnv, net_type, gamma=0
             print('step idx %d | total reward for group2: %0.2f | total kill num: %0.2f | total survive num: %0.2f' % (step_idx, epoch_total_reward, epoch_total_kill_num, epoch_total_survive_num))
             writer.add_scalar('train/total_reward_for_group2', epoch_total_reward, epoch)
             writer.add_scalar('train/kill_num_for_group2', epoch_total_kill_num, epoch)
+            writer.add_scalar('train/survive_num_for_group2', epoch_total_survive_num, epoch)
 
             total_reward_list.append(epoch_total_reward)
             ave_kill_num_list.append(epoch_total_kill_num)
@@ -521,6 +500,211 @@ def epoch_train_a2c(train_env: MagentEnv, test_env: MagentEnv, net_type, gamma=0
         data_dict[index + 'total_reward'] = total_reward_list
         data_dict[index + 'kill_num'] = ave_kill_num_list
         data_dict[index + 'survive_num'] = ave_survive_num_list
-        dp.get_csv(csv_url + net_type + '_' + timestamp + '.csv', data_dict)
+        dp.get_csv(csv_url + net_type + '_' + timestamp + '_' + str(seed_flag) + '.csv', data_dict)
 
+
+def a2c_test(step_idx, test_env, test_num, agent_1, agent_2, print_info, print_info_rate):
+    print('step idx %d ... test stage starting ...' % step_idx)
+    total_kill_num = 0
+    total_survive_num = 0
+    total_reward = 0
+
+    for test_episode in range(test_num):
+        obs_t = test_env.reset(use_random_init=False)
+        done = False
+        alive_info = None
+
+        while not done:
+            group1_as = []
+            for o in obs_t[0]:
+                group1_as.append(agent_1.sample_action(torch.from_numpy(o).cuda().float(), 0.01))
+
+            group2_as = []
+            mask_list = []
+            for o in obs_t[1]:
+                out = agent_2.pi(torch.from_numpy(o).cuda().float().reshape(1, -1), detach=True)
+                a = Categorical(out[0]).sample().cpu().numpy()
+                group2_as.append(a)
+                mask_list.append(out[1])
+
+            next_obs_t, rewards, done, alive_info = test_env.step([group1_as, group2_as])
+
+            alive_info = alive_info['agent_live']
+            alive_agent_ids = test_env.get_group_agent_id(1)
+            cur_rewards = []
+            for alive_agent_id in alive_agent_ids:
+                cur_rewards.append(rewards[1][alive_agent_id])
+            total_reward += sum(cur_rewards)
+
+            if print_info and test_episode % print_info_rate == 0:
+                print('step idx %d episode %d log -- ' % (step_idx, test_episode))
+                print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), '\tgroup1 actions: ', group1_as)
+                print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), '\tgroup2 actions: ', group2_as)
+                print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), '\talive_info: ', alive_info)
+                print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), '\trewards: ', rewards)
+                print('mask log: ', mask_list)
+
+            obs_t = next_obs_t
+
+        total_kill_num += np.sum(alive_info[0] == 0)
+        total_survive_num += np.sum(alive_info[1] != 0)
+        print('test ... step idx %d episode %d' % (step_idx, test_episode))
+        
+    return total_reward, total_kill_num, total_survive_num
+
+
+def epoch_train_ppo(env: MagentEnv, net_type, gamma=0.98, 
+    lr=1e-4, hidden_dim=32, aggregate_form='mean', group_num=3,
+    agent_num=20, opp_policy=None, model_save_url='../../data/model/',
+    episodes_per_epoch=100, episodes_per_test=20, epoch_num=500, tensorboard_data='../../data/log/data_info_',
+    save_data=True, csv_url='../../data/csv/', seed_flag=1, nonlin='softmax', 
+    print_info_rate=20, print_info=True, concatenation=False, k_epoch=3, lmbda=0.95, eps_clip=0.1, t_horizon=20, beta=0.1, print_log=False):
+    env_action_space = env.action_space.n
+    env_obs_space = env.observation_space.shape[0]
+    print('env action space: ', env_action_space, ' env obs space: ', env_obs_space)
+    # group1作为对手，真正训练的是group2
+    agent_1 = torch.load(opp_policy)
+
+    agent_2 = PPO(obs_dim=env_obs_space, n_actions=env_action_space, hidden_dim=hidden_dim, net_type=net_type, concatenation=concatenation,
+                agent_num=agent_num, aggregate_form=aggregate_form, group_num=group_num, nonlin=nonlin).cuda()
     
+    # 这里为每个agent都定义一个Dataset，考虑到ppo on-policy
+    data_sets = [DataSet() for _ in range(agent_num)]
+    optimizer = optim.Adam(agent_2.parameters(), lr=lr)
+
+    total_reward_list = []
+    ave_kill_num_list = []
+    ave_survive_num_list = []
+
+    timestamp = time.strftime('%Y%m%d%H%M%S', time.localtime())
+    writer = SummaryWriter(tensorboard_data + net_type + '_' + timestamp)
+
+    train_step = 0
+
+    for epoch in range(epoch_num):
+        print('epoch %d training starts' % epoch)
+
+        for episode in range(episodes_per_epoch):
+            obs = env.reset(use_random_init=False)
+            done = False
+            alive_info = env.get_live_agent()
+
+            while not done:
+                for t in range(t_horizon):
+                    group1_as = []
+                    for o in obs[0]:
+                        group1_as.append(agent_1.sample_action(torch.from_numpy(o).cuda().float(), 0.01))
+
+                    group2_as = []
+                    group2_probs = []
+                    for o in obs[1]:
+                        out = agent_2.pi(torch.from_numpy(o).cuda().float().reshape(1, -1), detach=True)
+                        m = Categorical(out[0]).sample().item()
+                        group2_as.append(m)
+                        group2_probs.append(out[0].squeeze())
+
+                    next_obs, rewards, done, alive_info = env.step([group1_as, group2_as])
+                
+                    alive_info = alive_info['agent_live']
+                    alive_agent_ids = env.get_group_agent_id(1)
+
+                    # cur_rewards = []
+                    # print('alive id: ', alive_agent_ids)
+                    for id, alive_agent_id in enumerate(alive_agent_ids):
+                        # print('group2 probs: ', len(group2_probs), '\t', group2_probs[0].shape)
+                        data_sets[id].put_data((obs[1][id], group2_as[id], rewards[1][alive_agent_id], next_obs[1][id], group2_probs[id][group2_as[id]].item(), 1 - alive_info[1][alive_agent_id]))
+                        # cur_rewards.append(rewards[1][alive_agent_id])
+
+                    obs = next_obs
+                    if done:
+                        print('episode %d is over ...' % (episode))
+                        break
+                
+                loss = None
+                print('learning ...')
+                for data in data_sets:
+                    # print(data.data)
+                    if data.not_none():
+                        # s_prime有的才拿来训练
+                        loss = learn_ppo(agent_2, data, optimizer, k_epoch, lmbda, eps_clip, beta, print_log)
+        
+                if print_log and loss != None:
+                    writer.add_scalar('train_loss/total_loss', loss[0].item(), train_step)
+                    writer.add_scalar('train_loss/actor_loss', loss[1].item(), train_step)
+                    writer.add_scalar('train_loss/critic_loss', loss[2].item(), train_step)
+                    writer.add_scalar('train_loss/entropy_loss', loss[3].item(), train_step)
+                    train_step += 1
+
+            print('trainging ... epoch %d episode %d is over' % (epoch, episode))
+        
+        print('test stage for epoch %d' % epoch)
+        total_kill_num = 0
+        total_survive_num = 0
+        total_reward = 0
+ 
+        for test_episode in range(episodes_per_test):
+            obs = env.reset(use_random_init=False)
+            done = False
+            alive_info = None
+
+            while not done:
+                group1_as = []
+                for o in obs[0]:
+                    group1_as.append(agent_1.sample_action(torch.from_numpy(o).cuda().float(), 0.01))
+
+                group2_as = []
+                mask_list = []
+                for o in obs[1]:
+                    out = agent_2.pi(torch.from_numpy(o).cuda().float().reshape(1, -1), detach=True)
+                    m = Categorical(out[0]).sample().item()
+                    group2_as.append(m)
+                    mask_list.append(out[1])
+                
+                next_obs, rewards, done, alive_info = env.step([group1_as, group2_as])
+
+                alive_info = alive_info['agent_live']
+                alive_agent_ids = env.get_group_agent_id(1)
+                cur_rewards = []
+                for alive_agent_id in alive_agent_ids:
+                    cur_rewards.append(rewards[1][alive_agent_id])
+                total_reward += sum(cur_rewards)
+
+                if print_info and test_episode % print_info_rate == 0:
+                    print('epoch %d episode %d log -- ' % (epoch, episode))
+                    print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), '\tgroup1 actions: ', group1_as)
+                    print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), '\tgroup2 actions: ', group2_as)
+                    print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), '\talive_info: ', alive_info)
+                    print(time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()), '\trewards: ', rewards)
+                    print('mask log: ', mask_list)
+
+                obs = next_obs
+
+            total_kill_num += np.sum(alive_info[0] == 0)
+            total_survive_num += np.sum(alive_info[1] != 0)
+            print('test ... epoch %d episode %d' % (epoch, test_episode))
+        
+        epoch_total_reward = total_reward / episodes_per_test
+        epoch_total_kill_num = total_kill_num / episodes_per_test
+        epoch_total_survive_num = total_survive_num / episodes_per_test
+        print('epoch %d | total reward for group2: %0.2f | total kill num: %0.2f | total survive num: %0.2f' % (epoch, epoch_total_reward, epoch_total_kill_num, epoch_total_survive_num))
+        writer.add_scalar('train/total_reward_for_group2', epoch_total_reward, epoch)
+        writer.add_scalar('train/kill_num_for_group2', epoch_total_kill_num, epoch)
+        writer.add_scalar('train/survive_num_for_group2', epoch_total_survive_num, epoch)
+
+        total_reward_list.append(epoch_total_reward)
+        ave_kill_num_list.append(epoch_total_kill_num)
+        ave_survive_num_list.append(epoch_total_survive_num)
+
+    torch.save(agent_2, model_save_url + net_type + '_' + timestamp + '_' + str(seed_flag) + '.th')
+    print('model is saved.')
+    writer.close()
+
+    if save_data:
+        print('saving data ....')
+        data_dict = {}
+        index = 'seed(' + str(seed_flag) + ')'
+        data_dict[index + 'total_reward'] = total_reward_list
+        data_dict[index + 'kill_num'] = ave_kill_num_list
+        data_dict[index + 'survive_num'] = ave_survive_num_list
+        dp.get_csv(csv_url + net_type + '_' + timestamp + '_' + str(seed_flag) + '.csv', data_dict)
+        print('csv is saved.')

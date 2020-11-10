@@ -57,7 +57,7 @@ class HandProcess(nn.Module):
 
 
 class HandProcessGroup(nn.Module):
-    def __init__(self, obs_dim, n_actions, hidden_dim, agent_num, ig_num=10, **kwargs):
+    def __init__(self, obs_dim, n_actions, hidden_dim, agent_num, ig_num=5, **kwargs):
         super(HandProcessGroup, self).__init__()
         self.ig_num = ig_num
 
