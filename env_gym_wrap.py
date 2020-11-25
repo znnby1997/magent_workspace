@@ -1,27 +1,25 @@
 import numpy as np
 import magent
+from magent.builtin.rule_model import RandomActor
 import itertools
 from gym import spaces
 import time
 
-def generate_map(env, id_sets, pos_sets, handles):
+def generate_map(env, pos_sets, handles):
     env.reset()
 
-    left_pos = pos_sets[0]
-    left_id = id_sets[0]
-    env.add_agents(handles[left_id], method='custom', pos=left_pos)
-
-    right_pos = pos_sets[1]
-    right_id = id_sets[1]
-    env.add_agents(handles[right_id], method='custom', pos=right_pos)
+    for pos, handle in zip(pos_sets, handles):
+        if len(pos) > 0:
+            env.add_agents(handle, method='custom', pos=pos)
 
 """ 从环境的原始观测中提取信息作为我们的原始观测
     这里新加入一个噪声参数，用于在原始观测中加入噪声
     这里直接设置额外加入3个噪声agent信息
 """
-def obs_info_extract(views, features, group_id, max_agent, debug=False, have_env_info=False, noisy=False):
+def obs_info_extract(views, features, group_id, max_agent, noisy_agent_num, debug=False, have_env_info=False, noisy=False):
     # 这里的views和features表示了一个group的
     # group_id=0表示group1，1表示group2
+    # 加了噪声agent之后，每多一个group，就会多3个bit（group, group's hp, group's minimap)
     assert len(views.shape) == 4
 
     """提取后的观测向量：[agent自身信息，环境信息，观测到的各个对手信息，观测到的各个队友信息]
@@ -41,7 +39,7 @@ def obs_info_extract(views, features, group_id, max_agent, debug=False, have_env
 
     # 提取对手以及队友观测信息向量
     for view in views:
-        opp_info = np.zeros((max_agent, 2 + view.shape[0] * 2))
+        opp_info = np.zeros((max_agent + noisy_agent_num, 2 + view.shape[0] * 2))
         partner_info = np.zeros((max_agent - 1, 2 + view.shape[0] * 2))
         opp_index = 0
         partner_index = 0
@@ -61,6 +59,15 @@ def obs_info_extract(views, features, group_id, max_agent, debug=False, have_env
                     opp_info[opp_index][2 + row] = 1
                     opp_info[opp_index][2 + view.shape[0] + col] = 1
                     opp_index += 1
+                
+                if noisy_agent_num > 0 and row != 6 and col != 6 and view[row][col][7] == 1:
+                    # 噪声agent，作为对手信息，混合在对手中
+                    opp_info[opp_index][0] = view[row][col][8]
+                    opp_info[opp_index][1] = 2
+                    opp_info[opp_index][2 + row] = 1
+                    opp_info[opp_index][2 + view.shape[0] + col] = 1
+                    opp_index += 1
+
         opp_infos.append(opp_info.flatten())
         partner_infos.append(partner_info.flatten())
     
@@ -89,13 +96,11 @@ obs_input = obs_info_extract
 
 
 class MagentEnv:
-    def __init__(self, agent_num=20, map_size=15, id_set=[0, 1], shift_delta=0, max_step=100, 
-                    have_env_info=False, opp_policy_random=True, distance_sort=False, noisy_info=False):
-        self.agent_num = agent_num
-
+    def __init__(self, agent_num=20, map_size=15, id_set=[0, 1], shift_delta=0, max_step=100, noisy_agent_num=0,
+                    have_env_info=False, opp_policy_random=True, noisy_info=False, render_url='../../data/render/'):
         magent.utility.init_logger('battle')
-        self.env = magent.GridWorld("battle", map_size=map_size)
-        self.env.set_render_dir("../../data/render/render_" + time.strftime('%Y%m%d%H%M%S', time.localtime()))
+        self.env = magent.GridWorld("battle", map_size=map_size, noisy_agent_num=noisy_agent_num)
+        self.env.set_render_dir(render_url + 'render_' + time.strftime('%Y%m%d%H%M%S', time.localtime()))
         # self.env.set_render_dir("render_" + time.strftime('%Y%m%d%H%M%S', time.localtime()))
         self.handles = self.env.get_handles()
 
@@ -107,9 +112,9 @@ class MagentEnv:
         self.n_group = len(id_set)
         self.shift_delta = shift_delta
         self.opp_policy_random = opp_policy_random
-        self.distance_sort = distance_sort
 
         self.noisy_info = noisy_info
+        self.noisy_agent_num = noisy_agent_num
 
         # i取值((map_size - 1)/2 - 5, (map_size - 1)/2)
         # (4-5, 4+5)
@@ -132,6 +137,8 @@ class MagentEnv:
         self.group_0_reward = []
         self.group_1_reward = []
 
+        self.noisy_group = None
+
     def get_obs(self):
         obs = []
         # 得到活着的agent的id
@@ -139,7 +146,7 @@ class MagentEnv:
 
         # handles[0]实际上是最后训练出来的对手的观测,既不需要排序也不需要噪声
         views, features = self.env.get_observation(self.handles[0])
-        obs.append(obs_input(views, features, 0, self.agent_num, have_env_info=self.have_env_info))
+        obs.append(obs_input(views, features, 0, self.agent_num, noisy_agent_num=0, have_env_info=self.have_env_info))
 
         if self.opp_policy_random:
             opp_obs = self.env.get_observation(self.handles[1])
@@ -147,11 +154,7 @@ class MagentEnv:
         else:
             # 真正的训练模型使用的观测，可以包含排序以及噪声
             views, features = self.env.get_observation(self.handles[1])
-            if self.distance_sort:
-                obs.append(
-                    self.obs_sort_by_distance(obs_input(views, features, 1, self.agent_num, have_env_info=self.have_env_info)))
-            else:
-                obs.append(obs_input(views, features, 1, self.agent_num, have_env_info=self.have_env_info, noisy=self.noisy_info))
+            obs.append(obs_input(views, features, 1, self.agent_num, noisy_agent_num=self.noisy_agent_num, have_env_info=self.have_env_info, noisy=self.noisy_info))
         return obs
 
     def get_group_agent_id(self, group_id):
@@ -191,7 +194,13 @@ class MagentEnv:
             pos_set = [self.left_side_config[:self.agent_num],
                        self.right_side_config[:self.agent_num]]
 
-        generate_map(self.env, self.id_set, pos_set, self.handles)
+        noisy_agent_pos = [np.random.randint(2, self.map_size - 2, size=2) for _ in range(self.noisy_agent_num)]
+        pos_set.append(noisy_agent_pos)
+
+        generate_map(self.env, pos_set, self.handles)
+
+        if self.noisy_agent_num > 0:
+            self.noisy_group = RandomActor(self.env, self.handles[2], 'noisy_group')
 
         obs = self.get_obs()
         return obs
@@ -207,6 +216,12 @@ class MagentEnv:
         # id_1 = self.env.get_agent_id(self.handles[1])
 
         # print(id_1)
+
+        if self.noisy_agent_num > 0:
+            noisy_obs = self.env.get_observation(self.handles[2])
+            noisy_ids = self.env.get_agent_id(self.handles[2])
+            noisy_actions = self.noisy_group.infer_action(noisy_obs, noisy_ids)
+            self.env.set_action(self.handles[2], noisy_actions)
 
         self.env.set_action(self.handles[0], np.array(actions[0], dtype=np.int32))
         self.env.set_action(self.handles[1], np.array(actions[1], dtype=np.int32))
@@ -260,53 +275,6 @@ class MagentEnv:
 
         return live
 
-    def obs_sort_by_distance(self, group_original_obs):
-        # 前36个为自身信息
-        ans = []
-        for original_obs in group_original_obs:
-            ans_ = original_obs[:36]
-            opp_index = 36 + 28 * self.agent_num
-            opps_info = np.hsplit(original_obs[36:opp_index], 20) # 20 agents
-            partners_info = np.hsplit(original_obs[opp_index:], 19) # 19 agents
-
-            opps = []
-            pars = []
-
-            for opp in opps_info:
-                if np.sum(opp) == 0:
-                    opps.append([20, opp.tolist()])
-                else:
-                    index = np.nonzero(opp)[0] - 2
-                    x = index[-2]
-                    y = index[-1] - 13
-                    opps.append([np.abs(x - 6) + np.abs(y - 6), opp.tolist()])
-            opps = sorted(opps)
-            
-            for par in partners_info:
-                if np.sum(par) == 0:
-                    pars.append([20, par.tolist()])
-                else:
-                    index = np.nonzero(par)[0] - 2
-                    x = index[-2]
-                    y = index[-1] - 13
-                    pars.append([np.abs(x - 6) + np.abs(y - 6), par.tolist()])
-            pars = sorted(pars)
-
-            opps_info = []
-            pars_info = []
-            for opp in opps:
-                opps_info.append(opp[-1])
-            opps_info = np.hstack(opps_info)
-            for par in pars:
-                pars_info.append(par[-1])
-            pars_info = np.hstack(pars_info)
-            ans_ = np.hstack((ans_, opps_info, pars_info))
-            ans.append(ans_)
-        # print(ans)
-        ans = np.vstack(ans)
-        # print(ans.shape)
-        return ans.astype(float)
-
     @property
     def action_space(self):
         # 8 + 13
@@ -323,12 +291,12 @@ class MagentEnv:
         if self.noisy_info:
             noisy_info_space = 28 * 3
         
-        other_agent_info_space = 28 * (self.agent_num * 2 - 1) # size: 28 * 9 = 252
+        other_agent_info_space = 28 * (self.agent_num * 2 - 1 + self.noisy_agent_num) # size: 28 * 9 = 252
         return spaces.Box(low=0, high=1, shape=(self_info_space + env_info_space + other_agent_info_space + noisy_info_space, ), dtype=np.float32)
 
 
 if __name__ == '__main__':
-    env = MagentEnv(noisy_info=True)
+    env = MagentEnv(noisy_agent_num=10)
     print('action space: ', env.action_space.n)
     print('obs space: ', env.observation_space.shape[0])
     obs = env.reset()
@@ -337,5 +305,9 @@ if __name__ == '__main__':
     # print('group2 obs: ', obs[1])
     # for i in range(len(obs[0])):
     #     print(obs[0][i])
-    # obs, reward, done, alive_info = env.step(env.action_space.sample())
+    for i in range(100):
+        g1_as = np.random.randint(0, 21, size=20)
+        g2_as = np.random.randint(0, 21, size=20)
+ 
+        obs, reward, done, alive_info = env.step([g1_as, g2_as], render=True)
     # print(alive_info)

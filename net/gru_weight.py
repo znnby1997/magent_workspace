@@ -98,3 +98,32 @@ class GruGenAttNetNew(nn.Module):
 
     def get_weight(self):
         return self.att_weight
+
+
+class BiGruGA(nn.Module):
+    def __init__(self, obs_dim, n_actions, hidden_dim, **kwargs):
+        super(BiGruGA, self).__init__()
+
+        self.query_layer = nn.Linear(obs_dim, hidden_dim)
+        self.o_encoder = nn.Linear(28, hidden_dim)
+        # self.keys_layer = nn.GRU(input_size=hidden_dim, hidden_size=hidden_dim, bidirectional=True, batch_first=True)
+        self.keys_layer = nn.Linear(hidden_dim, 2*hidden_dim)
+        self.em_align = nn.Linear(hidden_dim * 2, hidden_dim)
+
+    def forward(self, x, **kwargs):
+        other_info = x[:, 36:]
+        other_info = torch.stack(other_info.split(28, dim=1)).permute(1, 0, 2) # size: [batch, agent num, 28]
+
+        total_info = f.relu(self.query_layer(x)) # size: [batch, hidden_dim]
+        other_e = f.relu(self.o_encoder(other_info)) # size: [batch, agent num, hidden_dim]
+        gru_output = self.keys_layer(other_e) # size: [batch, agent num, hidden_dim * 2]
+        keys = f.relu(self.em_align(gru_output)) # size: [batch, agent num, hidden_dim]
+
+        weights = f.softmax(torch.bmm(total_info.unsqueeze(1), keys.permute(0, 2, 1)), dim=2) # size: [batch, 1, agent num]
+
+        o_e = torch.bmm(weights, other_e).squeeze(1) # size: [batch, hidden_dim]
+        obs_em = torch.cat([total_info, o_e], dim=1) # size: [batch, hidden_dim*2]
+
+        return obs_em, weights.squeeze(1)
+
+        

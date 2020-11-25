@@ -13,11 +13,12 @@ sys.path.append('..')
 from net.alw_att_net import AlwAttNet, AlwGAT
 from net.dot_scale_att_net import DotScaleAttNet, ScaleDotAtt
 from net.dyan import Dyan
-from net.gru_weight import GruGenAttNet, GruGenAttNetNew
+from net.gru_weight import GruGenAttNet, GruGenAttNetNew, BiGruGA
 from net.group_att_agg import GAA, GroupNet
 from net.group_weight import GroupWeight
 from net.hand_process import HandProcess, HandProcessGroup
-
+from net.group_net import GroupNet
+from net.ian import IAN
 #Hyperparameters
 # learning_rate = 0.0005
 gamma         = 0.98
@@ -29,7 +30,7 @@ net_dict = {
     'alw': AlwAttNet, 'alw_gat': AlwGAT, 'dot_scale': DotScaleAttNet, 'dyan': Dyan,
     'gruga': GruGenAttNet, 'none': None, 'ssd': ScaleDotAtt, 'gn': GroupNet,
     'gaa': GAA, 'gruga2': GruGenAttNetNew, 'gw': GroupWeight, 'hand_weight': HandProcess,
-    'hand_group': HandProcessGroup
+    'hand_group': HandProcessGroup, 'group_net': GroupNet, 'bigruga': BiGruGA, 'ian': IAN
 }
 
 class ReplayBufferM():
@@ -67,10 +68,17 @@ class QnetM(nn.Module):
                 obs_dim, n_actions, hidden_dim, agent_num=agent_num, 
                 concatenation=concatenation, aggregate_form=aggregate_form, group_num=group_num, nonlin=nonlin)
         else:
-            self.e = nn.Linear(obs_dim, hidden_dim)
+            # self.e = nn.Linear(obs_dim, hidden_dim)
+            self.e = nn.Sequential(
+                nn.Linear(obs_dim, hidden_dim),
+                nn.ReLU(),
+                nn.Linear(hidden_dim, hidden_dim),
+                nn.ReLU(),
+                nn.Linear(hidden_dim, n_actions)
+            )
 
-        self.fc2 = nn.Linear(hidden_dim, hidden_dim)
-        self.fc3 = nn.Linear(hidden_dim, n_actions)
+        # self.fc2 = nn.Linear(hidden_dim, hidden_dim)
+        # self.fc3 = nn.Linear(hidden_dim, n_actions)
         self.n_actions = n_actions
 
     def forward(self, x, detach=False):
@@ -80,10 +88,10 @@ class QnetM(nn.Module):
         else:
             em, att_weight = self.e(x), None
 
-        x = F.relu(em)
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        return x, att_weight
+        # x = F.relu(em)
+        # x = F.relu(self.fc2(x))
+        # x = self.fc3(x)
+        return em, att_weight
       
     def sample_action(self, obs, epsilon):
         out = self.forward(obs.reshape(1, -1), detach=True)

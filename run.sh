@@ -112,13 +112,88 @@
 # python -u shell_main.py --net_type 'none' --basic_model 'a2c' --seed 0 --print_info 0 --print_log 1 --hidden_dim 32 --max_train_steps 100000 --noisy 0 --learning_rate 1e-3 --beta 0.5  --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/train_a2c_alw_soft_v1.txt 2>&1 &
 # python -u shell_main.py --net_type 'none' --basic_model 'a2c' --seed 0 --print_info 0 --print_log 1 --hidden_dim 32 --max_train_steps 100000 --noisy 0 --learning_rate 1e-3 --beta 0.02  --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/train_a2c_none_v3.txt 2>&1 &
 # python -u shell_main.py --net_type 'none' --basic_model 'a2c' --seed 0 --print_info 0 --print_log 1 --hidden_dim 32 --max_train_steps 100000 --noisy 0 --learning_rate 1e-3 --beta 0.1  --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/train_a2c_none_v4.txt 2>&1 &
+# a2c none
+# for ((seed=0;seed<5;seed+=1))
+# do
+#     python -u shell_main.py --net_type 'none' --basic_model 'a2c' --seed $seed --print_info 0 --print_log 1 --hidden_dim 32 --max_train_steps 100000 --noisy 0 --learning_rate 1e-3 --beta 0.02  --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/train_a2c_none_$seed.txt 2>&1 &
+#     sleep 2
+# done
+
+# for ((seed=0;seed<5;seed+=1))
+# do
+#     python -u shell_main.py --net_type 'none' --basic_model 'a2c' --seed $seed --print_info 0 --print_log 1 --hidden_dim 32 --max_train_steps 100000 --noisy 0 --learning_rate 1e-3 --beta 0.1  --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/train_a2c_none_beta01_$seed.txt 2>&1 &
+#     sleep 2
+# done
+
+# 增大step看看
+# for ((seed=0;seed<5;seed+=1))
+# do
+#     python -u shell_main.py --net_type 'none' --basic_model 'a2c' --seed $seed --print_info 1 --print_log 1 --hidden_dim 32 --max_train_steps 200000 --noisy 0 --learning_rate 1e-3 --beta 0.02  --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/train_a2c_none_beta002_$seed.txt 2>&1 &
+#     sleep 2
+# done
+
+# 20000 steps alw_sig
+# for ((seed=0;seed<5;seed+=1))
+# do
+#     python -u shell_main.py --net_type 'alw' --basic_model 'a2c' --seed $seed --print_info 1 --print_log 1 --hidden_dim 32 --max_train_steps 200000 --noisy 0 --learning_rate 1e-3 --beta 0.02 --nonlin 'sigmoid' --concatenation 1  --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/train_a2c_alw_sig_$seed.txt 2>&1 &
+#     sleep 3
+# done
+
+# alw_softmax
+# for ((seed=0;seed<5;seed+=1))
+# do
+#     python -u shell_main.py --net_type 'alw' --basic_model 'a2c' --seed $seed --print_info 1 --print_log 1 --hidden_dim 32 --max_train_steps 200000 --noisy 0 --learning_rate 1e-3 --beta 0.02 --nonlin 'softmax' --concatenation 1  --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/train_a2c_alw_soft_$seed.txt 2>&1 &
+#     sleep 3
+# done
+
+# scale dot
+# for ((seed=0;seed<5;seed+=1))
+# do
+#     python -u shell_main.py --net_type 'dot_scale' --basic_model 'a2c' --seed $seed --print_info 1 --print_log 1 --hidden_dim 32 --max_train_steps 200000 --noisy 0 --learning_rate 1e-3 --beta 0.02 --concatenation 0  --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/train_a2c_scale_dot_$seed.txt 2>&1 &
+#     sleep 3
+# done
+
+# gruga
+# for ((seed=0;seed<5;seed+=1))
+# do
+#     python -u shell_main.py --net_type 'gruga' --basic_model 'a2c' --seed $seed --print_info 1 --print_log 1 --hidden_dim 32 --max_train_steps 200000 --noisy 0 --learning_rate 1e-3 --beta 0.02 --concatenation 0  --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/train_a2c_gruga_$seed.txt 2>&1 &
+#     sleep 3
+# done
+
+# gruga2
+# for ((seed=0;seed<5;seed+=1))
+# do
+#     python -u shell_main.py --net_type 'gruga2' --basic_model 'a2c' --seed $seed --print_info 1 --print_log 1 --hidden_dim 32 --max_train_steps 200000 --noisy 0 --learning_rate 1e-3 --beta 0.02 --concatenation 0  --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/train_a2c_gruga2_$seed.txt 2>&1 &
+#     sleep 3
+# done
 
 
 # ppo测试
 # python -u shell_main.py --net_type 'alw' --basic_model 'ppo' --seed 0 --print_info 0 --print_log 1 --hidden_dim 32 --epoch_num 1 --noisy 0 --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/ppo/log_file/test_ppo_none_v0.txt 2>&1 &
-python -u shell_main.py --net_type 'none' --basic_model 'ppo' --seed 0 --print_info 0 --print_log 1 --hidden_dim 32 --epoch_num 200 --noisy 0 --eps_clip 0.2 --t_horizon 10 --learning_rate 2e-3 --beta 1e-3 --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/ppo/log_file/train_ppo_none_v2.txt 2>&1 &
-sleep 2
-python -u shell_main.py --net_type 'none' --basic_model 'ppo' --seed 0 --print_info 0 --print_log 1 --hidden_dim 32 --epoch_num 200 --noisy 0 --eps_clip 0.2 --t_horizon 10 --learning_rate 2e-3 --beta 1e-2 --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/ppo/log_file/train_ppo_none_v3.txt 2>&1 &
+# python -u shell_main.py --net_type 'none' --basic_model 'ppo' --seed 0 --print_info 0 --print_log 1 --hidden_dim 32 --epoch_num 200 --noisy 0 --eps_clip 0.2 --t_horizon 10 --learning_rate 2e-3 --beta 1e-3 --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/ppo/log_file/train_ppo_none_v2.txt 2>&1 &
+# sleep 2
+# python -u shell_main.py --net_type 'none' --basic_model 'ppo' --seed 0 --print_info 0 --print_log 1 --hidden_dim 32 --epoch_num 200 --noisy 0 --eps_clip 0.2 --t_horizon 10 --learning_rate 2e-3 --beta 1e-2 --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/ppo/log_file/train_ppo_none_v3.txt 2>&1 &
+# ppo none
+# for ((seed=0;seed<5;seed+=1))
+# do
+#     python -u shell_main.py --net_type 'none' --basic_model 'ppo' --seed $seed --print_info 1 --print_log 1 --hidden_dim 32 --epoch_num 200 --noisy 0 --eps_clip 0.2 --t_horizon 10 --learning_rate 2e-3 --beta 1e-2 --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/ppo/log_file/train_ppo_none_beta001_$seed.txt 2>&1 &
+#     sleep 2
+# done
+# test ppo
+# python -u shell_main.py --test_model 1 --noisy 0 --basic_model 'ppo' --seed 0 --net_flag 'none' --csv_url '/mnt/znn/data/ppo/csv/' --test_model_url '/mnt/znn/data/ppo/model/none_20201112155841_0.th' --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/ppo/log_file/test_none_0.txt  2>&1 &
+# sleep 2
+# python -u shell_main.py --test_model 1 --noisy 0 --basic_model 'ppo' --seed 1 --net_flag 'none' --csv_url '/mnt/znn/data/ppo/csv/' --test_model_url '/mnt/znn/data/ppo/model/none_20201112155841_1.th' --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/ppo/log_file/test_none_1.txt  2>&1 &
+# sleep 2
+# python -u shell_main.py --test_model 1 --noisy 0 --basic_model 'ppo' --seed 2 --net_flag 'none' --csv_url '/mnt/znn/data/ppo/csv/' --test_model_url '/mnt/znn/data/ppo/model/none_20201112155843_2.th' --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/ppo/log_file/test_none_2.txt  2>&1 &
+# sleep 2
+# python -u shell_main.py --test_model 1 --noisy 0 --basic_model 'ppo' --seed 3 --net_flag 'none' --csv_url '/mnt/znn/data/ppo/csv/' --test_model_url '/mnt/znn/data/ppo/model/none_20201112155843_3.th' --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/ppo/log_file/test_none_3.txt  2>&1 &
+# sleep 2
+# python -u shell_main.py --test_model 1 --noisy 0 --basic_model 'ppo' --seed 4 --net_flag 'none' --csv_url '/mnt/znn/data/ppo/csv/' --test_model_url '/mnt/znn/data/ppo/model/none_20201112155846_4.th' --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/ppo/log_file/test_none_4.txt  2>&1 &
+# sleep 2
+
+# python -u shell_main.py --test_model 1 --noisy 0 --basic_model 'ppo' --seed 0 --net_flag 'none' --save_data 0 --render_url '/mnt/znn/data/ppo/render/' --test_model_url '/mnt/znn/data/ppo/model/none_20201112155841_0.th' --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/ppo/log_file/test_none_0.txt  2>&1 &
+
+
 
 # 测试DQN
 # none
@@ -210,3 +285,76 @@ python -u shell_main.py --net_type 'none' --basic_model 'ppo' --seed 0 --print_i
 # sleep 2
 # python -u shell_main.py --test_model 1 --noisy 0 --seed 4 --print_info 0 --net_flag 'hg_5' --test_model_url '/mnt/znn/data/model/hand_group_20201104101117_4.th' --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/log_file/test_hg5_4.txt  2>&1 &
 # sleep 2
+
+# group_net
+# 测试
+# python -u shell_main.py --net_type 'group_net' --epoch_train 1 --epoch_num 200 --seed 0 --print_info 1 --hidden_dim 32 --batch_size 256 --capacity 100000 --noisy 0 --ig_num 5 --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/log_file/train_group_net_ig5_v0.txt 2>&1 &
+# 跑一组实验
+# for ((seed=0;seed<5;seed+=1))
+# do
+#     python -u shell_main.py --net_type 'group_net' --epoch_train 1 --epoch_num 200 --seed $seed --print_info 1 --hidden_dim 32 --batch_size 256 --capacity 100000 --noisy 0 --ig_num 5 --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/log_file/train_group_net_ig5_$seed.txt 2>&1 &
+#     sleep 5
+# done
+
+
+# 测试a2c
+# python -u shell_main.py --test_model 1 --noisy 0 --basic_model 'a2c' --seed 0 --net_flag 'none' --csv_url '/mnt/znn/data/a2c/csv/' --test_model_url '/mnt/znn/data/a2c/model/none_20201112160149_0.th' --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/test_none_0.txt  2>&1 &
+# sleep 2
+# python -u shell_main.py --test_model 1 --noisy 0 --basic_model 'a2c' --seed 1 --net_flag 'none' --csv_url '/mnt/znn/data/a2c/csv/' --test_model_url '/mnt/znn/data/a2c/model/none_20201112160149_1.th' --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/test_none_1.txt  2>&1 &
+# sleep 2
+# python -u shell_main.py --test_model 1 --noisy 0 --basic_model 'a2c' --seed 2 --net_flag 'none' --csv_url '/mnt/znn/data/a2c/csv/' --test_model_url '/mnt/znn/data/a2c/model/none_20201112160151_2.th' --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/test_none_2.txt  2>&1 &
+# sleep 2
+# python -u shell_main.py --test_model 1 --noisy 0 --basic_model 'a2c' --seed 3 --net_flag 'none' --csv_url '/mnt/znn/data/a2c/csv/' --test_model_url '/mnt/znn/data/a2c/model/none_20201112160151_3.th' --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/test_none_3.txt  2>&1 &
+# sleep 2
+# python -u shell_main.py --test_model 1 --noisy 0 --basic_model 'a2c' --seed 4 --net_flag 'none' --csv_url '/mnt/znn/data/a2c/csv/' --test_model_url '/mnt/znn/data/a2c/model/none_20201112160152_4.th' --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/test_none_4.txt  2>&1 &
+# sleep 2
+
+# python -u shell_main.py --test_model 1 --noisy 0 --basic_model 'a2c' --seed 0 --net_flag 'alw_sig' --csv_url '/mnt/znn/data/a2c/csv/' --test_model_url '/mnt/znn/data/a2c/model/alw_20201113205346_0.th' --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/test_alw_sig_0.txt  2>&1 &
+# sleep 2
+# python -u shell_main.py --test_model 1 --noisy 0 --basic_model 'a2c' --seed 1 --net_flag 'alw_sig' --csv_url '/mnt/znn/data/a2c/csv/' --test_model_url '/mnt/znn/data/a2c/model/alw_20201113205347_1.th' --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/test_alw_sig_1.txt  2>&1 &
+# sleep 2
+# python -u shell_main.py --test_model 1 --noisy 0 --basic_model 'a2c' --seed 2 --net_flag 'alw_sig' --csv_url '/mnt/znn/data/a2c/csv/' --test_model_url '/mnt/znn/data/a2c/model/alw_20201113205347_2.th' --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/test_alw_sig_2.txt  2>&1 &
+# sleep 2
+# python -u shell_main.py --test_model 1 --noisy 0 --basic_model 'a2c' --seed 3 --net_flag 'alw_sig' --csv_url '/mnt/znn/data/a2c/csv/' --test_model_url '/mnt/znn/data/a2c/model/alw_20201113205348_3.th' --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/test_alw_sig_3.txt  2>&1 &
+# sleep 2
+# python -u shell_main.py --test_model 1 --noisy 0 --basic_model 'a2c' --seed 4 --net_flag 'alw_sig' --csv_url '/mnt/znn/data/a2c/csv/' --test_model_url '/mnt/znn/data/a2c/model/alw_20201113205348_4.th' --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/test_alw_sig_4.txt  2>&1 &
+# sleep 2
+
+# python -u shell_main.py --test_model 1 --noisy 0 --basic_model 'a2c' --seed 0 --net_flag 'alw_soft' --csv_url '/mnt/znn/data/a2c/csv/' --test_model_url '/mnt/znn/data/a2c/model/alw_20201113205620_0.th' --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/test_alw_soft_0.txt  2>&1 &
+# sleep 2
+# python -u shell_main.py --test_model 1 --noisy 0 --basic_model 'a2c' --seed 1 --net_flag 'alw_soft' --csv_url '/mnt/znn/data/a2c/csv/' --test_model_url '/mnt/znn/data/a2c/model/alw_20201113205622_1.th' --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/test_alw_soft_1.txt  2>&1 &
+# sleep 2
+# python -u shell_main.py --test_model 1 --noisy 0 --basic_model 'a2c' --seed 2 --net_flag 'alw_soft' --csv_url '/mnt/znn/data/a2c/csv/' --test_model_url '/mnt/znn/data/a2c/model/alw_20201113205626_2.th' --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/test_alw_soft_2.txt  2>&1 &
+# sleep 2
+# python -u shell_main.py --test_model 1 --noisy 0 --basic_model 'a2c' --seed 3 --net_flag 'alw_soft' --csv_url '/mnt/znn/data/a2c/csv/' --test_model_url '/mnt/znn/data/a2c/model/alw_20201113205627_3.th' --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/test_alw_soft_3.txt  2>&1 &
+# sleep 2
+# python -u shell_main.py --test_model 1 --noisy 0 --basic_model 'a2c' --seed 4 --net_flag 'alw_soft' --csv_url '/mnt/znn/data/a2c/csv/' --test_model_url '/mnt/znn/data/a2c/model/alw_20201113205628_4.th' --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/a2c/log_file/test_alw_soft_4.txt  2>&1 &
+# sleep 2
+
+
+# random_init_pos env
+# dqn
+# python -u shell_main.py --net_type 'alw' --epoch_train 1 --epoch_num 200 --seed 0 --print_info 1 --hidden_dim 32 --batch_size 256 --capacity 100000 --noisy 0 --concatenation 1 --nonlin 'softmax' --random_init_pos 1 --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/log_file/train_alw_soft_random_v0.txt 2>&1 &
+# python -u shell_main.py --net_type 'gruga2' --epoch_train 1 --epoch_num 200 --seed 0 --print_info 1 --hidden_dim 32 --batch_size 256 --capacity 100000 --noisy 0 --random_init_pos 1 --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/log_file/train_gruga2_random_v0.txt 2>&1 &
+# python -u shell_main.py --net_type 'none' --epoch_train 1 --epoch_num 200 --seed 0 --print_info 1 --hidden_dim 32 --batch_size 256 --capacity 100000 --noisy 0 --random_init_pos 1 --opp_policy '/mnt/znn/data/opp_model/opp_20200915121500/final_model.th' > /mnt/znn/data/log_file/train_none_random_v0.txt 2>&1 &
+
+
+# 试跑bigruga
+# random_init_pos env noisy_agent_num=5
+# train opp in 5*5
+# python -u shell_main.py --train_opp 1 --seed 0 --episode_num 10000 --agent_num 5 --map_size 10 --random_init_pos 1 --noisy_agent_num 5 > /mnt/znn/data/log_file/train_opp_v0.txt 2>&1 &
+# test opp policy
+# python -u shell_main.py --test_opp 1 --seed 0 --opp_policy '/mnt/znn/data/opp_model/opp_20201121194852/episode_5999.th' --agent_num 5 --map_size 10 --random_init_pos 1 --noisy_agent_num 5 > /mnt/znn/data/log_file/test_opp_v0.txt 2>&1 &
+# 训练bigruga
+# python -u shell_main.py --net_type 'bigruga' --epoch_train 1 --epoch_num 10 --seed 0 --print_info 1 --hidden_dim 32 --batch_size 256 --capacity 10000 --random_init_pos 1 --agent_num 5 --map_size 15 --noisy_agent_num 5 --opp_policy '/disk/znn/data/opp_model/opp_20201121194852/episode_5999.th' > /disk/znn/data/log_file/test_random_v0.txt 2>&1 &
+# 训练ian
+# python -u shell_main.py --net_type 'ian' --epoch_train 1 --epoch_num 200 --seed 0 --print_info 1 --hidden_dim 32 --batch_size 256 --capacity 10000 --random_init_pos 1 --agent_num 5 --map_size 15 --noisy_agent_num 5 --opp_policy '/disk/znn/data/opp_model/opp_20201121194852/episode_5999.th' > /disk/znn/data/log_file/train_ian_v1.txt 2>&1 &
+# 训练none
+# for ((seed=1;seed<5;seed+=1))
+# do
+#     python -u shell_main.py --net_type 'none' --epoch_train 1 --epoch_num 200 --seed $seed --print_info 1 --hidden_dim 32 --batch_size 256 --capacity 10000 --random_init_pos 1 --agent_num 5 --map_size 15 --noisy_agent_num 5 --opp_policy '/disk/znn/data/opp_model/opp_20201121194852/episode_5999.th' > /disk/znn/data/log_file/train_none_$seed.txt 2>&1 &
+#     sleep 5
+# done
+# test ian
+python -u shell_main.py --test_model 1 --seed 0 --test_model_url '/disk/znn/data/model/ian_20201123074934_0.th' --random_init_pos 1 --agent_num 5 --map_size 15 --noisy_agent_num 5 --opp_policy '/disk/znn/data/opp_model/opp_20201121194852/episode_5999.th' > /disk/znn/data/log_file/test_ian_0.txt 2>&1 &
+   

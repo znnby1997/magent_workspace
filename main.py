@@ -28,14 +28,16 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '3'
 }
 """
 
-env = MagentEnv(agent_num=20, map_size=15, max_step=200, opp_policy_random=True)
+# env = MagentEnv(agent_num=20, map_size=15, max_step=200, opp_policy_random=True)
 
 # 用于训练一个对手模型，自身对手为随机动作
 def train_opp_policy(env: MagentEnv, gamma=0.98, batch_size=32, capacity=5000, 
         lr=1e-4, hidden_dim=32, model_save_url='../../data/model/', episode_num=5000, 
-        tensorboard_data='../../data/log/data_info_', update_model_rate=20, print_info_rate=40):
+        tensorboard_data='../../data/log/data_info_', update_model_rate=20, print_info_rate=40, random_init=False):
     env_action_space = env.action_space.n
-    env_obs_space = env.observation_space.shape[0]
+    env_obs_space = env.observation_space.shape[0] - 28 * 5
+    print('action space: ', env_action_space)
+    print('obs space: ', env_obs_space)
 
     # 定义模型
     q = Qnet(env_obs_space, env_action_space, hidden_dim).cuda()
@@ -56,10 +58,11 @@ def train_opp_policy(env: MagentEnv, gamma=0.98, batch_size=32, capacity=5000,
 
     for episode in range(episode_num):
         epsilon = max(0.01, 1.0 - 0.01 * episode)
-        obs = env.reset(use_random_init=False)
+        obs = env.reset(use_random_init=random_init)
         done = False
         total_reward = 0
-        alive_info = None
+        alive_info = env.get_live_agent()
+        print('alive info: ', alive_info)
 
         while not done:
             # group 1决策
@@ -110,7 +113,7 @@ def train_opp_policy(env: MagentEnv, gamma=0.98, batch_size=32, capacity=5000,
     print('model is saved.')
     writer.close()
 
-def test_opp(env: MagentEnv, model=None, episode_num=20, render=True):
+def test_opp(env: MagentEnv, model=None, episode_num=20, render=True, random_init=False):
     print('test opponent policy')
     agent_1 = torch.load(model)
     group2 = RandomActor(env.env, env.handles[1])
@@ -120,7 +123,7 @@ def test_opp(env: MagentEnv, model=None, episode_num=20, render=True):
     survive_num_1_list, survive_num_2_list = [], []
 
     for episode in range(episode_num):
-        obs = env.reset(use_random_init=False)
+        obs = env.reset(use_random_init=random_init)
         done = False
         total_reward_1, total_reward_2 = 0, 0
         kill_num_1, kill_num_2 = 0, 0
@@ -150,7 +153,7 @@ def test_opp(env: MagentEnv, model=None, episode_num=20, render=True):
     print('group2 -- ave total reward %0.2f kill num %0.2f survive num %0.2f' % (sum(total_reward_2_list) / episode_num, sum(kill_num_2_list) / episode_num, sum(survive_num_2_list) / episode_num))
     
 
-def test_model(env: MagentEnv, model=None, episode_num=20, render=True, print_att_weight=False, net_flag='none',
+def test_model(env: MagentEnv, model=None, basic_model='dqn', episode_num=20, render=True, print_att_weight=False, net_flag='none', random_init=False,
                 print_group_mask=False, csv_url='../../data/csv/', seed=0, save_data=True, print_info=True):
     print('test env')
     agent_1 = torch.load(model[0])  # 对手的模型
@@ -166,7 +169,7 @@ def test_model(env: MagentEnv, model=None, episode_num=20, render=True, print_at
     survive_num_1_list, survive_num_2_list = [], []
 
     for episode in range(episode_num):
-        obs = env.reset(use_random_init=False)
+        obs = env.reset(use_random_init=random_init)
         done = False
         total_reward_1 = 0
         total_reward_2 = 0
@@ -183,10 +186,23 @@ def test_model(env: MagentEnv, model=None, episode_num=20, render=True, print_at
             # agent actions in group2
             group2_as = []
             mask_list = []
-            for o in obs[1]:
-                out = agent_2.sample_action(torch.from_numpy(o).cuda().float(), 0.01)
-                mask_list.append(out[1])
-                group2_as.append(out[0])
+            if basic_model == 'dqn':
+                for o in obs[1]:
+                    out = agent_2.sample_action(torch.from_numpy(o).cuda().float(), 0.01)
+                    mask_list.append(out[1])
+                    group2_as.append(out[0])
+            elif basic_model == 'a2c':
+                for o in obs[1]:
+                    out = agent_2.pi(torch.from_numpy(o).cuda().float().reshape(1, -1), detach=True)
+                    a = Categorical(out[0]).sample().cpu().numpy()
+                    group2_as.append(a)
+                    mask_list.append(out[1])
+            elif basic_model == 'ppo':
+                for o in obs[1]:
+                    out = agent_2.pi(torch.from_numpy(o).cuda().float().reshape(1, -1), detach=True)
+                    m = Categorical(out[0]).sample().item()
+                    group2_as.append(m)
+                    mask_list.append(out[1])
                 # group2_as.append(agent_2.sample_action(torch.from_numpy(o).cuda().float(), 0.01))
                 # if print_att_weight:
                 #     weights_list.append(agent_2.get_weight().cpu().numpy())
@@ -240,17 +256,17 @@ def test_model(env: MagentEnv, model=None, episode_num=20, render=True, print_at
         data_dict[index + 'kill_num_2'] = kill_num_2_list 
         data_dict[index + 'survive_num_1'] = survive_num_1_list
         data_dict[index + 'survive_num_2'] = survive_num_2_list
-        dp.get_csv(csv_url + net_flag + '_' + str(seed) + '.csv', data_dict)
+        dp.get_csv(csv_url + 'test_' + timestamp + net_flag + '_' + str(seed) + '.csv', data_dict)
         print('over !!')
 
 
 # 统计的是total_reward以及每个epoch中测试时group2平均击杀数量
 def epoch_train(env: MagentEnv, net_type, gamma=0.98, batch_size=5000, capacity=100000, 
-    lr=1e-4, hidden_dim=32, aggregate_form='mean', group_num=(1, 3),
+    lr=1e-4, hidden_dim=32, aggregate_form='mean', random_init=False,
     agent_num=20, opp_policy=None, model_save_url='../../data/model/',
     episodes_per_epoch=100, episodes_per_test=20, epoch_num=500, tensorboard_data='../../data/log/data_info_',
     save_data=True, csv_url='../../data/csv/', seed_flag=1, update_net=True, nonlin='softmax',
-    update_model_rate=100, print_info_rate=20, print_info=True, concatenation=False, beta=0.1, need_diff=False):
+    update_model_rate=100, print_info_rate=20, print_info=True, concatenation=False, beta=0.1, need_diff=False, ig_num=5):
     env_action_space = env.action_space.n
     env_obs_space = env.observation_space.shape[0]
     # group1作为对手，真正训练的是group2
@@ -258,9 +274,9 @@ def epoch_train(env: MagentEnv, net_type, gamma=0.98, batch_size=5000, capacity=
 
     # 定义模型
     q = QnetM(env_obs_space, env_action_space, hidden_dim=hidden_dim, net_type=net_type, concatenation=concatenation,
-        agent_num=agent_num, aggregate_form=aggregate_form, group_num=group_num, nonlin=nonlin).cuda()
+        agent_num=agent_num, aggregate_form=aggregate_form, group_num=ig_num, nonlin=nonlin).cuda()
     q_target = QnetM(env_obs_space, env_action_space, hidden_dim=hidden_dim, net_type=net_type, concatenation=concatenation,
-        agent_num=agent_num, aggregate_form=aggregate_form, group_num=group_num, nonlin=nonlin).cuda()
+        agent_num=agent_num, aggregate_form=aggregate_form, group_num=ig_num, nonlin=nonlin).cuda()
     q_target.load_state_dict(q.state_dict())
     memory = ReplayBufferM(capacity)
     optimizer = optim.Adam(q.parameters(), lr=lr)
@@ -277,7 +293,7 @@ def epoch_train(env: MagentEnv, net_type, gamma=0.98, batch_size=5000, capacity=
 
         for episode in range(episodes_per_epoch):
             epsilon = max(0.01, 1.0 - 0.01 * episode)
-            obs = env.reset(use_random_init=False)
+            obs = env.reset(use_random_init=random_init)
             done = False
             alive_info = env.get_live_agent()
 
@@ -325,7 +341,7 @@ def epoch_train(env: MagentEnv, net_type, gamma=0.98, batch_size=5000, capacity=
         total_reward = 0
  
         for test_episode in range(episodes_per_test):
-            obs = env.reset(use_random_init=False)
+            obs = env.reset(use_random_init=random_init)
             done = False
             alive_info = None
 
@@ -393,8 +409,8 @@ def epoch_train(env: MagentEnv, net_type, gamma=0.98, batch_size=5000, capacity=
 def epoch_train_a2c(train_env: MagentEnv, test_env: MagentEnv, net_type, gamma=0.98, lr=1e-4, hidden_dim=32, aggregate_form='mean',
     agent_num=20, opp_policy=None, model_save_url='../../data/a2c/model/', update_interval = 5, group_num=3,
     max_train_steps=50000, test_num=20, test_rate=100,  tensorboard_data='../../data/a2c/log/data_info_',
-    save_data=True, csv_url='../../data/a2c/csv/', seed_flag=1, nonlin='softmax',
-    update_model_rate=100, print_info_rate=20, print_info=True, concatenation=False, entr_w=0.02, print_log=False):
+    save_data=True, csv_url='../../data/a2c/csv/', seed_flag=1, nonlin='softmax', random_init=False,
+    update_model_rate=100, print_info_rate=20, print_info=True, concatenation=False, entr_w=0.02, print_log=False, ig_num=5):
     env_action_space = train_env.action_space.n
     env_obs_space = train_env.observation_space.shape[0]
     print('env_obs_space: ', env_obs_space)
@@ -404,7 +420,7 @@ def epoch_train_a2c(train_env: MagentEnv, test_env: MagentEnv, net_type, gamma=0
     # envs = ParallelEnv(n_train_processes, env)
     
     agent_2 = ActorCritic(obs_dim=env_obs_space, n_actions=env_action_space, hidden_dim=hidden_dim, net_type=net_type, concatenation=concatenation,
-                agent_num=agent_num, aggregate_form=aggregate_form, group_num=group_num, nonlin=nonlin).cuda()
+                agent_num=agent_num, aggregate_form=aggregate_form, group_num=ig_num, nonlin=nonlin).cuda()
     
     optimizer = optim.Adam(agent_2.parameters(), lr=lr)
 
@@ -417,7 +433,7 @@ def epoch_train_a2c(train_env: MagentEnv, test_env: MagentEnv, net_type, gamma=0
 
     step_idx = 0
     train_step = 0
-    obs = train_env.reset()
+    obs = train_env.reset(use_random_init=random_init)
     epoch = 0
     while step_idx < max_train_steps:
         s_lst, a_lst, r_lst, mask_lst = [[] for _ in range(agent_num)], [[] for _ in range(agent_num)], \
@@ -449,7 +465,7 @@ def epoch_train_a2c(train_env: MagentEnv, test_env: MagentEnv, net_type, gamma=0
                 mask_lst[alive_agent_id].append(alive_info[1][alive_agent_id])
 
             if done:
-                s_prime = train_env.reset()
+                s_prime = train_env.reset(use_random_init=random_init)
             
             obs = s_prime
             step_idx += 1
@@ -473,7 +489,7 @@ def epoch_train_a2c(train_env: MagentEnv, test_env: MagentEnv, net_type, gamma=0
             train_step += 1
 
         if step_idx % test_rate == 0:
-            total_reward, total_kill_num, total_survive_num = a2c_test(step_idx, test_env, test_num, agent_1, agent_2, print_info, print_info_rate)
+            total_reward, total_kill_num, total_survive_num = a2c_test(step_idx, test_env, test_num, agent_1, agent_2, print_info, print_info_rate, random_init)
             
             epoch_total_reward = total_reward / test_num
             epoch_total_kill_num = total_kill_num / test_num
@@ -503,14 +519,14 @@ def epoch_train_a2c(train_env: MagentEnv, test_env: MagentEnv, net_type, gamma=0
         dp.get_csv(csv_url + net_type + '_' + timestamp + '_' + str(seed_flag) + '.csv', data_dict)
 
 
-def a2c_test(step_idx, test_env, test_num, agent_1, agent_2, print_info, print_info_rate):
+def a2c_test(step_idx, test_env, test_num, agent_1, agent_2, print_info, print_info_rate, random_init):
     print('step idx %d ... test stage starting ...' % step_idx)
     total_kill_num = 0
     total_survive_num = 0
     total_reward = 0
 
     for test_episode in range(test_num):
-        obs_t = test_env.reset(use_random_init=False)
+        obs_t = test_env.reset(use_random_init=random_init)
         done = False
         alive_info = None
 
@@ -555,10 +571,10 @@ def a2c_test(step_idx, test_env, test_num, agent_1, agent_2, print_info, print_i
 
 def epoch_train_ppo(env: MagentEnv, net_type, gamma=0.98, 
     lr=1e-4, hidden_dim=32, aggregate_form='mean', group_num=3,
-    agent_num=20, opp_policy=None, model_save_url='../../data/model/',
+    agent_num=20, opp_policy=None, model_save_url='../../data/model/', random_init=False,
     episodes_per_epoch=100, episodes_per_test=20, epoch_num=500, tensorboard_data='../../data/log/data_info_',
     save_data=True, csv_url='../../data/csv/', seed_flag=1, nonlin='softmax', 
-    print_info_rate=20, print_info=True, concatenation=False, k_epoch=3, lmbda=0.95, eps_clip=0.1, t_horizon=20, beta=0.1, print_log=False):
+    print_info_rate=20, print_info=True, concatenation=False, k_epoch=3, lmbda=0.95, eps_clip=0.1, t_horizon=20, beta=0.1, print_log=False, ig_num=5):
     env_action_space = env.action_space.n
     env_obs_space = env.observation_space.shape[0]
     print('env action space: ', env_action_space, ' env obs space: ', env_obs_space)
@@ -566,7 +582,7 @@ def epoch_train_ppo(env: MagentEnv, net_type, gamma=0.98,
     agent_1 = torch.load(opp_policy)
 
     agent_2 = PPO(obs_dim=env_obs_space, n_actions=env_action_space, hidden_dim=hidden_dim, net_type=net_type, concatenation=concatenation,
-                agent_num=agent_num, aggregate_form=aggregate_form, group_num=group_num, nonlin=nonlin).cuda()
+                agent_num=agent_num, aggregate_form=aggregate_form, group_num=ig_num, nonlin=nonlin).cuda()
     
     # 这里为每个agent都定义一个Dataset，考虑到ppo on-policy
     data_sets = [DataSet() for _ in range(agent_num)]
@@ -585,7 +601,7 @@ def epoch_train_ppo(env: MagentEnv, net_type, gamma=0.98,
         print('epoch %d training starts' % epoch)
 
         for episode in range(episodes_per_epoch):
-            obs = env.reset(use_random_init=False)
+            obs = env.reset(use_random_init=random_init)
             done = False
             alive_info = env.get_live_agent()
 
@@ -643,7 +659,7 @@ def epoch_train_ppo(env: MagentEnv, net_type, gamma=0.98,
         total_reward = 0
  
         for test_episode in range(episodes_per_test):
-            obs = env.reset(use_random_init=False)
+            obs = env.reset(use_random_init=random_init)
             done = False
             alive_info = None
 

@@ -17,6 +17,7 @@ from net.gru_weight import GruGenAttNet, GruGenAttNetNew
 from net.group_att_agg import GAA, GroupNet
 from net.group_weight import GroupWeight
 from net.hand_process import HandProcess, HandProcessGroup
+from net.group_net import GroupNet
 
 # Hyperparameters
 # n_train_processes = 3
@@ -30,7 +31,7 @@ net_dict = {
     'alw': AlwAttNet, 'alw_gat': AlwGAT, 'dot_scale': DotScaleAttNet, 'dyan': Dyan,
     'gruga': GruGenAttNet, 'none': None, 'ssd': ScaleDotAtt, 'gn': GroupNet,
     'gaa': GAA, 'gruga2': GruGenAttNetNew, 'gw': GroupWeight, 'hand_weight': HandProcess,
-    'hand_group': HandProcessGroup
+    'hand_group': HandProcessGroup, 'group_net': GroupNet
 }
 
 class ActorCritic(nn.Module):
