@@ -5,15 +5,6 @@ from scipy.interpolate import make_interp_spline
 import numpy as np
 import os
 
-path_url = '/Users/zhangningning/研究生/科研/experiment/magent_workspace/data/'
-model_set = [
-    'none', 'softmax', 'tanh', 'sigmoid', 'hand', 'alw'
-]
-x_trick = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']
-y_trick = [
-    'self_info', 'opp1', 'opp2', 'opp3', 'opp4', 'opp5', 'opp6', 'opp7',
-    'opp8', 'opp9', 'opp10', 'partner1', 'partner2', 'partner3', 'partner4', 'partner5', 'partner6',
-    'partner7', 'partner8', 'partner9']
 
 def get_csv(csv_url, data_dict):
     if os.path.exists(csv_url):
@@ -25,24 +16,6 @@ def get_csv(csv_url, data_dict):
         df[key] = value
     df.to_csv(csv_url, index=False)
 
-def att_pack(att_weight_list, agent_num=10):
-    new_weight_list = []
-    for weight in att_weight_list:
-        agent_info = np.zeros(agent_num * 2)
-        index = 0
-        for i in range(agent_num * 2 - 1):
-            agent_info[i] = sum(weight[index: index + 21])
-            index += 21
-        new_weight_list.append(agent_info)
-    return new_weight_list
-
-def get_att_weight_csv(new_file, data_dict, agent_num):
-    df = pd.DataFrame()
-    df['agent_attention'] = [i for i in range(agent_num * 2)]
-    for key, value in zip(data_dict.keys(), data_dict.values()):
-        df[key] = value
-    df.to_csv(new_file, mode='a', index=False)
-
 def smoothing(y_vals, w=0.99):
     smoothed = []
     last_val = y_vals[0]
@@ -52,47 +25,50 @@ def smoothing(y_vals, w=0.99):
         last_val = smooth_val
     return smoothed
 
-def get_curve(path_url, model_dict: dict, y_label='kill_num', save_url='baseline_total_reward1.png', epoch_num=100):
+def get_curve(path_url, model_dict: dict, y_label='total_reward', save_url='baseline_total_reward1.png', epoch_num=200, w=0.95,
+                x_label='epoch'):
     index = np.array([j for j in range(epoch_num)])
     for model, seeds_data in zip(model_dict.keys(), model_dict.values()):
         seeds = []
-        for i in range(5):
+        for i in range(len(seeds_data)):
             seed_url = path_url + seeds_data[i]
+            if not os.path.exists(seed_url):
+                continue
             seed_data = pd.read_csv(seed_url)
-            seed_data = seed_data['seed(' + str(i) + ')' + y_label].values
+            seed_data = seed_data['seed(' + str(i) + ')' + y_label].values  # type: np.ndarray
+            if seed_data.shape[0] > epoch_num:
+                seed_data = seed_data[0:epoch_num]
             seeds.append(seed_data)
-
-        max_values = []
-        mean_values = []
-        min_values = []
-
-        for s0, s1, s2, s3, s4 in zip(seeds[0], seeds[1], seeds[2], seeds[3], seeds[4]):
-            max_values.append(max(s0, s1, s2, s3, s4))
-            mean_values.append(sum([s0, s1, s2, s3, s4]) / 5)
-            min_values.append(min(s0, s1, s2, s3, s4))
-
-        max_smooth_vals = smoothing(max_values)
-        mean_smooth_vals = smoothing(mean_values)
-        min_smooth_vals = smoothing(min_values)
+        seeds_vals = np.stack(seeds)
+        mean = np.mean(seeds_vals, axis=0)
+        std = np.std(seeds_vals, axis=0)
+        
+        low_bound = smoothing(mean - std / 2, w=w)
+        up_bound = smoothing(mean + std / 2, w=w)
+        mean = smoothing(mean, w=w)
 
         x_smooth = np.linspace(index.min(), index.max(), 300)
-        y_smooth1 = make_interp_spline(index, max_smooth_vals)(x_smooth)
-        y_smooth2 = make_interp_spline(index, mean_smooth_vals)(x_smooth)
-        # y_smooth4 = make_interp_spline(index, smoothed)(x_smooth)
-        y_smooth3 = make_interp_spline(index, min_smooth_vals)(x_smooth)
-        # plt.plot(x_smooth, y_smooth1)
+        y_smooth1 = make_interp_spline(index, low_bound)(x_smooth)
+        y_smooth2 = make_interp_spline(index, mean)(x_smooth)
+        y_smooth3 = make_interp_spline(index, up_bound)(x_smooth)
         plt.plot(x_smooth, y_smooth2, label=model)
-        # plt.plot(x_smooth, y_smooth3)
         plt.fill_between(x_smooth, y_smooth1, y_smooth3, alpha=0.2)
 
-    plt.xlabel('epoch')
+    plt.xlabel(x_label)
     plt.ylabel(y_label)
     plt.legend()
     plt.savefig(save_url)
     plt.close()
 
-def get_matrix_fig(path_url, save_url='test.png'):
-    file_names = os.listdir(path_url)
+
+def get_att_weight_csv(new_file, data_dict, agent_num):
+    df = pd.DataFrame()
+    df['agent_attention'] = [i for i in range(agent_num * 2)]
+    for key, value in zip(data_dict.keys(), data_dict.values()):
+        df[key] = value
+    df.to_csv(new_file, mode='a', index=False)
+
+
     file_names.reverse()
     index = 1
     for file_name in file_names:
@@ -113,6 +89,27 @@ def get_matrix_fig(path_url, save_url='test.png'):
         plt.savefig('test' + str(index) + '.png')
         index += 1
         plt.close()
+
+def save_weight_info(step_id, alive_info, obs_info, weights, res_url, col_num, agent_num):
+    step_flag = np.full([1, col_num], np.nan)
+    df = pd.DataFrame(step_flag, index=['step_' + str(step_id)])
+    df.to_csv(res_url, header=None, mode='a')
+
+    agent_idx = [str(k) for k in range(agent_num)]
+
+    res = []
+    obs_idx = 0
+    for i in range(agent_num):
+        if alive_info[i]:
+            # print('obs_info shape: ', obs_info[obs_idx][36:].shape, ' weights shape: ', weights[obs_idx].shape)
+            res.append(np.hstack((obs_info[obs_idx][36:], weights[obs_idx])))
+            obs_idx += 1
+        else:
+            res.append(np.full((col_num, ), np.nan))
+    res = np.vstack(res)
+    res_df = pd.DataFrame(res, index=agent_idx)
+    res_df.to_csv(res_url, header=None, mode='a')
+
     
 if __name__ == '__main__':
     # get_curve(path_url, model_set)

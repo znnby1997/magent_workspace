@@ -13,10 +13,8 @@ def generate_map(env, pos_sets, handles):
             env.add_agents(handle, method='custom', pos=pos)
 
 """ 从环境的原始观测中提取信息作为我们的原始观测
-    这里新加入一个噪声参数，用于在原始观测中加入噪声
-    这里直接设置额外加入3个噪声agent信息
 """
-def obs_info_extract(views, features, group_id, max_agent, noisy_agent_num, debug=False, have_env_info=False, noisy=False):
+def obs_info_extract(views, features, group_id, max_agent, noisy_agent_num, debug=False, have_env_info=False):
     # 这里的views和features表示了一个group的
     # group_id=0表示group1，1表示group2
     # 加了噪声agent之后，每多一个group，就会多3个bit（group, group's hp, group's minimap)
@@ -24,7 +22,7 @@ def obs_info_extract(views, features, group_id, max_agent, noisy_agent_num, debu
 
     """提取后的观测向量：[agent自身信息，环境信息，观测到的各个对手信息，观测到的各个队友信息]
         agent自身信息：feature包含需要的agent自身信息(id embedding, last action, last reward, relative pos)
-                    同时包含自身血量、自身所在group、自身minimap(minimap去掉)
+                    同时包含自身血量、自身所在group
         环境信息：观测到的wall的13 * 13维向量
         其他agent信息：血量, 所在group, 相对观测者的位置
     """
@@ -80,13 +78,6 @@ def obs_info_extract(views, features, group_id, max_agent, noisy_agent_num, debu
     output = None
     if have_env_info:
         output = np.hstack((self_infos, env_infos, opp_infos, partner_infos))
-    elif noisy:
-        noisy_infos = []
-        for view in views:
-            noisy_info = np.random.uniform(0, 1, (3, 2 + view.shape[0] * 2))
-            noisy_infos.append(noisy_info.flatten())
-        noisy_infos = np.vstack(noisy_infos)
-        output = np.hstack((self_infos, opp_infos, partner_infos, noisy_infos))
     else:
         output = np.hstack((self_infos, opp_infos, partner_infos))
     return output
@@ -96,11 +87,14 @@ obs_input = obs_info_extract
 
 
 class MagentEnv:
-    def __init__(self, agent_num=20, map_size=15, id_set=[0, 1], shift_delta=0, max_step=100, noisy_agent_num=0,
-                    have_env_info=False, opp_policy_random=True, noisy_info=False, render_url='../../data/render/'):
+    """
+        环境设置中所有agent的开始位置随机
+    """
+    def __init__(self, agent_num=20, map_size=15, id_set=[0, 1], max_step=100, noisy_agent_num=0,
+                    have_env_info=False, opp_policy_random=True, render_url=''):
         magent.utility.init_logger('battle')
         self.env = magent.GridWorld("battle", map_size=map_size, noisy_agent_num=noisy_agent_num)
-        self.env.set_render_dir(render_url + 'render_' + time.strftime('%Y%m%d%H%M%S', time.localtime()))
+        self.env.set_render_dir(render_url)
         # self.env.set_render_dir("render_" + time.strftime('%Y%m%d%H%M%S', time.localtime()))
         self.handles = self.env.get_handles()
 
@@ -110,32 +104,14 @@ class MagentEnv:
 
         self.id_set = id_set
         self.n_group = len(id_set)
-        self.shift_delta = shift_delta
         self.opp_policy_random = opp_policy_random
 
-        self.noisy_info = noisy_info
         self.noisy_agent_num = noisy_agent_num
-
-        # i取值((map_size - 1)/2 - 5, (map_size - 1)/2)
-        # (4-5, 4+5)
-        # # 20vs20 15*15map
-        if agent_num == 20 and map_size == 15:
-            self.left_side_config = [[i - shift_delta, j - shift_delta] for j in range(1, 8) for i in range(1, 4)]
-            self.right_side_config = [[i - shift_delta, j - shift_delta] for j in range(13, 6, -1) for i in range(13, 10, -1)]
-        elif agent_num == 10 and map_size == 10:
-            # 10vs10 10*10map
-            self.left_side_config = [[i - shift_delta, j - shift_delta] for j in range(1, 5) for i in range(1, 4)]
-            self.right_side_config = [[i - shift_delta, j - shift_delta] for j in range(8, 4, -1) for i in range(8, 5, -1)]
-    
+   
         self.done = False
-        self.reward_range = (-np.inf, np.inf)
-        self.metadata = {}
 
         self.step_num = 0
         self.max_step = max_step
-
-        self.group_0_reward = []
-        self.group_1_reward = []
 
         self.noisy_group = None
 
@@ -154,7 +130,7 @@ class MagentEnv:
         else:
             # 真正的训练模型使用的观测，可以包含排序以及噪声
             views, features = self.env.get_observation(self.handles[1])
-            obs.append(obs_input(views, features, 1, self.agent_num, noisy_agent_num=self.noisy_agent_num, have_env_info=self.have_env_info, noisy=self.noisy_info))
+            obs.append(obs_input(views, features, 1, self.agent_num, noisy_agent_num=self.noisy_agent_num, have_env_info=self.have_env_info))
         return obs
 
     def get_group_agent_id(self, group_id):
@@ -181,18 +157,14 @@ class MagentEnv:
 
         return reward
 
-    def reset(self, use_random_init=False):
+    def reset(self):
         # print('reset!!!!!')
         # print(len(self.env.get_alive(self.handles[0])), len(self.env.get_alive(self.handles[1])))
 
         self.done = False
 
-        if use_random_init:
-            random_pos_set = np.array(list(itertools.product(range(2, self.map_size-2), range(2, self.map_size-2))))[np.random.choice(range((self.map_size-4)**2), 2 * self.agent_num, replace=False)]
-            pos_set = [random_pos_set[:self.agent_num], random_pos_set[self.agent_num:]]
-        else:
-            pos_set = [self.left_side_config[:self.agent_num],
-                       self.right_side_config[:self.agent_num]]
+        random_pos_set = np.array(list(itertools.product(range(2, self.map_size-2), range(2, self.map_size-2))))[np.random.choice(range((self.map_size-4)**2), 2 * self.agent_num, replace=False)]
+        pos_set = [random_pos_set[:self.agent_num], random_pos_set[self.agent_num:]]
 
         noisy_agent_pos = [np.random.randint(2, self.map_size - 2, size=2) for _ in range(self.noisy_agent_num)]
         pos_set.append(noisy_agent_pos)
@@ -286,13 +258,9 @@ class MagentEnv:
         env_info_space = 0
         if self.have_env_info:
             env_info_space = self.env.get_view_space(self.handles[0])[0]**2
-
-        noisy_info_space = 0
-        if self.noisy_info:
-            noisy_info_space = 28 * 3
         
         other_agent_info_space = 28 * (self.agent_num * 2 - 1 + self.noisy_agent_num) # size: 28 * 9 = 252
-        return spaces.Box(low=0, high=1, shape=(self_info_space + env_info_space + other_agent_info_space + noisy_info_space, ), dtype=np.float32)
+        return spaces.Box(low=0, high=1, shape=(self_info_space + env_info_space + other_agent_info_space, ), dtype=np.float32)
 
 
 if __name__ == '__main__':

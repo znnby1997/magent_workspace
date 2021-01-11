@@ -13,8 +13,9 @@ gamma         = 0.98
 # batch_size    = 32
 
 class ReplayBuffer():
-    def __init__(self, buffer_limit):
+    def __init__(self, buffer_limit, device):
         self.buffer = collections.deque(maxlen=buffer_limit)
+        self.device = device
     
     def put(self, transition):
         self.buffer.append(transition)
@@ -31,9 +32,9 @@ class ReplayBuffer():
             s_prime_lst.append(s_prime)
             done_mask_lst.append([done_mask])
 
-        return torch.tensor(s_lst, dtype=torch.float).cuda(), torch.tensor(a_lst).cuda(), \
-               torch.tensor(r_lst, dtype=torch.float).cuda(), torch.tensor(s_prime_lst, dtype=torch.float).cuda(), \
-               torch.tensor(done_mask_lst, dtype=torch.float).cuda()
+        return torch.tensor(s_lst, dtype=torch.float).to(self.device), torch.tensor(a_lst).to(self.device), \
+               torch.tensor(r_lst, dtype=torch.float).to(self.device), torch.tensor(s_prime_lst, dtype=torch.float).to(self.device), \
+               torch.tensor(done_mask_lst, dtype=torch.float).to(self.device)
     
     def size(self):
         return len(self.buffer)
@@ -61,7 +62,7 @@ class Qnet(nn.Module):
             return out.argmax().item()
             
 def learn(q, q_target, memory, optimizer, batch_size):
-    print('learning  ......')
+    print('opp policy learning  ......')
     for i in range(10):
         s,a,r,s_prime,done_mask = memory.sample(batch_size)
 
@@ -74,43 +75,3 @@ def learn(q, q_target, memory, optimizer, batch_size):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-
-def main():
-    env = gym.make('CartPole-v1')
-    q = Qnet()
-    q_target = Qnet()
-    q_target.load_state_dict(q.state_dict())
-    memory = ReplayBuffer()
-
-    print_interval = 20
-    score = 0.0  
-    optimizer = optim.Adam(q.parameters(), lr=learning_rate)
-
-    for n_epi in range(10000):
-        epsilon = max(0.01, 0.08 - 0.01*(n_epi/200)) #Linear annealing from 8% to 1%
-        s = env.reset()
-        done = False
-
-        while not done:
-            a = q.sample_action(torch.from_numpy(s).float(), epsilon)      
-            s_prime, r, done, info = env.step(a)
-            done_mask = 0.0 if done else 1.0
-            memory.put((s,a,r/100.0,s_prime, done_mask))
-            s = s_prime
-
-            score += r
-            if done:
-                break
-            
-        if memory.size()>2000:
-            learn(q, q_target, memory, optimizer)
-
-        if n_epi%print_interval==0 and n_epi!=0:
-            q_target.load_state_dict(q.state_dict())
-            print("n_episode :{}, score : {:.1f}, n_buffer : {}, eps : {:.1f}%".format(
-                                                            n_epi, score/print_interval, memory.size(), epsilon*100))
-            score = 0.0
-    env.close()
-
-if __name__ == '__main__':
-    main()
