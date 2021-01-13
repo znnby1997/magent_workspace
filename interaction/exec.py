@@ -81,6 +81,8 @@ def exec_(env, model, epsilon, opp_policy, device, render=False):
         opp_total_reward += sum(rewards[0])
         agent_total_reward += sum(rewards[1])
 
+        obs = next_obs
+
     alive_info = alive_info['agent_live']
     opp_kill_num = np.sum(alive_info[1] == 0)
     agent_kill_num = np.sum(alive_info[0] == 0)
