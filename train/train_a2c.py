@@ -55,7 +55,7 @@ def train_a2c(env, net, gamma=0.98, lr=1e-4, hidden_dim=32,
     for epoch in range(epoch_num):
         print('Epoch %d -- trajectory data collection starts ...' % (epoch))
         for e_ in range(train_rate):
-            traj_data = exec_for_coll(env, agent, 0.01, opp, device)
+            traj_data = exec_for_coll(env, 'a2c', agent, 0.01, opp, device)
             data_buffer.push(traj_data)
             
             print('episode %d is over ...' % (e_))
@@ -67,7 +67,7 @@ def train_a2c(env, net, gamma=0.98, lr=1e-4, hidden_dim=32,
             writer.add_scalar('train_loss/critic_loss', c_loss, epoch)
             writer.add_scalar('train_loss/entropy_loss', e_loss, epoch)
 
-        print('epoch idx %d ... test stage starting ...' % epoch_idx)
+        print('epoch idx %d ... test stage starting ...' % epoch)
         total_kill_num = 0
         total_survive_num = 0
         total_reward = 0

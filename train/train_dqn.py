@@ -54,7 +54,7 @@ def train_dqn(env, net, gamma=0.98, batch_size=5000, capacity=100000,
 
         for episode in range(episodes_per_epoch):
             epsilon = max(0.01, 1.0 - 0.01 * episode)
-            memory.push(exec_for_coll(env, q, epsilon, opp, device))
+            memory.push(exec_for_coll(env, 'dqn', q, epsilon, opp, device))
 
             if len(memory) > batch_size:
                 _, last_loss = train(q, q_target, memory, optimizer, batch_size, gamma)
