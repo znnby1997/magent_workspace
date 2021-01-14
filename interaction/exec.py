@@ -12,7 +12,7 @@ def exec_for_coll(env, model_tag, model, epsilon, opp_policy, device):
     obs = env.reset()
     done = False
     alive_info = None
-    data_buffer = []
+    data_buffer = [[] for _ in range(env.agent_num)] if model_tag == 'ppo' else []
 
     while not done:
         opp_as = []
@@ -38,13 +38,11 @@ def exec_for_coll(env, model_tag, model, epsilon, opp_policy, device):
         alive_info = alive_info['agent_live']
         alive_agents_ids = env.get_group_agent_id(1)
 
-        cur_rewards = []
         for id, alive_agent_id in enumerate(alive_agents_ids):
             if model_tag != 'ppo':
                 data_buffer.append((obs[1][id], agent_as[id], rewards[1][alive_agent_id], next_obs[1][id], 1 - alive_info[1][alive_agent_id]))
             else:
-                data_buffer.append((obs[1][id], agent_as[id], rewards[1][alive_agent_id], next_obs[1][id], agent_probs[id], 1 - alive_info[1][alive_agent_id]))
-            cur_rewards.append(rewards[1][alive_agent_id])
+                data_buffer[id].append((obs[1][id], agent_as[id], rewards[1][alive_agent_id], next_obs[1][id], agent_probs[id], 1 - alive_info[1][alive_agent_id]))
 
         obs = next_obs
     

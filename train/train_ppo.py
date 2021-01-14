@@ -58,7 +58,9 @@ def train_ppo(env, net, gamma=0.98,
         for episode in range(episodes_per_epoch):
             print('episode %d start ...' % episode)
             traj_data = exec_for_coll(env, 'ppo', agent, 0.01, opp, device)
-            data_buffer.push(traj_data)
+            
+            for traj_ in traj_data:
+                data_buffer.push(traj_)
 
         print('learning ...')
         a_loss, c_loss, e_loss = 0.0, 0.0, 0.0
