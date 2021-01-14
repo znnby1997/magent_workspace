@@ -9,7 +9,7 @@ sys.path.append('..')
 
 from model.opp_model import Qnet, ReplayBuffer, learn
 
-def train_opp_policy(env: MagentEnv, gamma=0.98, batch_size=32, capacity=5000, 
+def train_opp_policy(env, gamma=0.98, batch_size=32, capacity=5000, 
         lr=1e-4, hidden_dim=32, model_save_url='', episode_num=5000, 
         tensorboard_data='', update_model_rate=20, print_info_rate=40, device=None):
     env_action_space = env.action_space.n
@@ -88,7 +88,7 @@ def train_opp_policy(env: MagentEnv, gamma=0.98, batch_size=32, capacity=5000,
     print('model is saved.')
     writer.close()
 
-def test_opp(env: MagentEnv, model=None, episode_num=20, render=True):
+def test_opp(env, model=None, episode_num=20, render=True):
     print('test opponent policy')
     agent_1 = torch.load(model)
     group2 = RandomActor(env.env, env.handles[1])

@@ -27,7 +27,7 @@ def train(model, buffer, optimizer, gamma, entropy_coef):
     buffer.clear()
     return loss.mean(), a_loss.mean(), c_loss.mean(), e_loss.mean()
 
-def train_a2c(env: MagentEnv, net, gamma=0.98, lr=1e-4, hidden_dim=32,
+def train_a2c(env, net, gamma=0.98, lr=1e-4, hidden_dim=32,
     agent_num=20, opp_policy=None, model_save_url='../../data/a2c/model/',
     epoch_num=1000, test_num=20, train_rate=20,  tensorboard_data='../../data/a2c/log/data_info_', data_buffer_limit=5000,
     save_data=True, csv_url='../../data/a2c/csv/', seed_flag=1, nonlin='softmax',

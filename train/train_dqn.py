@@ -22,7 +22,7 @@ def train(q, q_target, buffer, optimizer, batch_size, gamma):
     optimizer.step()
     return loss.mean(), last_loss.mean()
 
-def train_dqn(env: MagentEnv, net, gamma=0.98, batch_size=5000, capacity=100000, 
+def train_dqn(env, net, gamma=0.98, batch_size=5000, capacity=100000, 
     lr=1e-4, hidden_dim=32, agent_num=20, opp_policy=None, model_save_url='',
     episodes_per_epoch=100, episodes_per_test=20, epoch_num=500, tensorboard_data='',
     save_data=True, csv_url='', seed_flag=1, nonlin='softmax',
