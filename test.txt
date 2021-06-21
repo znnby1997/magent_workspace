@@ -1,0 +1,113 @@
+epoch 0 training starts
+episode 0 start ...
+done !!!!!!!! 167
+episode 1 start ...
+done !!!!!!!! 55
+learning ...
+trainging ... epoch 0 episode 1 is over
+test stage for epoch 0
+done !!!!!!!! 183
+test ... epoch 0 episode 0
+epoch 0 | total reward for group2: -11.06 | total kill num: 0.00 | total survive num: 0.00
+epoch 1 training starts
+episode 0 start ...
+done !!!!!!!! 201
+episode 1 start ...
+done !!!!!!!! 25
+learning ...
+trainging ... epoch 1 episode 1 is over
+test stage for epoch 1
+done !!!!!!!! 70
+test ... epoch 1 episode 0
+epoch 1 | total reward for group2: -5.28 | total kill num: 0.00 | total survive num: 0.00
+epoch 2 training starts
+episode 0 start ...
+done !!!!!!!! 201
+episode 1 start ...
+done !!!!!!!! 37
+learning ...
+trainging ... epoch 2 episode 1 is over
+test stage for epoch 2
+done !!!!!!!! 39
+test ... epoch 2 episode 0
+epoch 2 | total reward for group2: -5.03 | total kill num: 0.00 | total survive num: 0.00
+epoch 3 training starts
+episode 0 start ...
+done !!!!!!!! 201
+episode 1 start ...
+done !!!!!!!! 33
+learning ...
+trainging ... epoch 3 episode 1 is over
+test stage for epoch 3
+done !!!!!!!! 38
+test ... epoch 3 episode 0
+epoch 3 | total reward for group2: -5.27 | total kill num: 0.00 | total survive num: 0.00
+epoch 4 training starts
+episode 0 start ...
+done !!!!!!!! 34
+episode 1 start ...
+done !!!!!!!! 107
+learning ...
+trainging ... epoch 4 episode 1 is over
+test stage for epoch 4
+done !!!!!!!! 201
+test ... epoch 4 episode 0
+epoch 4 | total reward for group2: -12.85 | total kill num: 0.00 | total survive num: 1.00
+epoch 5 training starts
+episode 0 start ...
+done !!!!!!!! 43
+episode 1 start ...
+done !!!!!!!! 87
+learning ...
+trainging ... epoch 5 episode 1 is over
+test stage for epoch 5
+done !!!!!!!! 40
+test ... epoch 5 episode 0
+epoch 5 | total reward for group2: -3.61 | total kill num: 0.00 | total survive num: 0.00
+epoch 6 training starts
+episode 0 start ...
+done !!!!!!!! 201
+episode 1 start ...
+done !!!!!!!! 47
+learning ...
+trainging ... epoch 6 episode 1 is over
+test stage for epoch 6
+done !!!!!!!! 41
+test ... epoch 6 episode 0
+epoch 6 | total reward for group2: -4.24 | total kill num: 0.00 | total survive num: 0.00
+epoch 7 training starts
+episode 0 start ...
+done !!!!!!!! 201
+episode 1 start ...
+done !!!!!!!! 99
+learning ...
+trainging ... epoch 7 episode 1 is over
+test stage for epoch 7
+done !!!!!!!! 31
+test ... epoch 7 episode 0
+epoch 7 | total reward for group2: -5.14 | total kill num: 0.00 | total survive num: 0.00
+epoch 8 training starts
+episode 0 start ...
+done !!!!!!!! 29
+episode 1 start ...
+done !!!!!!!! 54
+learning ...
+trainging ... epoch 8 episode 1 is over
+test stage for epoch 8
+done !!!!!!!! 201
+test ... epoch 8 episode 0
+epoch 8 | total reward for group2: -10.71 | total kill num: 0.00 | total survive num: 1.00
+epoch 9 training starts
+episode 0 start ...
+done !!!!!!!! 74
+episode 1 start ...
+done !!!!!!!! 19
+learning ...
+trainging ... epoch 9 episode 1 is over
+test stage for epoch 9
+done !!!!!!!! 32
+test ... epoch 9 episode 0
+epoch 9 | total reward for group2: -4.80 | total kill num: 0.00 | total survive num: 0.00
+model is saved.
+saving data ....
+csv is saved.

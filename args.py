@@ -23,6 +23,7 @@ parser.add_argument('--noisy_num', default=5, type=int, help='noisy agents num')
 # model configuration
 parser.add_argument('--model_tag', default='ppo', type=str, help='basic rl model')
 parser.add_argument('--net', default='none', type=str, help='net type')
+parser.add_argument('--agg_version', default='v1', type=str, help='how to aggregate all the qs')
 parser.add_argument('--gamma', default=0.98, type=float, help='discount factor')
 parser.add_argument('--batch_size', default=256, type=int, help='sample minibatch')
 parser.add_argument('--capacity', default=5000, type=int, help='exp buffer limit')

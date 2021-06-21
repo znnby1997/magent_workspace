@@ -26,7 +26,7 @@ def train_dqn(env, net, gamma=0.98, batch_size=5000, capacity=100000,
     lr=1e-4, hidden_dim=32, agent_num=20, opp_policy=None, model_save_url='',
     episodes_per_epoch=100, episodes_per_test=20, epoch_num=500, tensorboard_data='',
     save_data=True, csv_url='', seed_flag=1, nonlin='softmax',
-    update_model_rate=100, print_log=True, device=None):
+    update_model_rate=100, print_log=True, device=None, agg='v1'):
     
     env_action_space = env.action_space.n
     env_obs_space = env.observation_space.shape[0]
@@ -34,9 +34,9 @@ def train_dqn(env, net, gamma=0.98, batch_size=5000, capacity=100000,
     assert opp_policy != '', 'opp policy cannot be empty'
     opp = torch.load(opp_policy)
 
-    q = QnetM(env_obs_space, env_action_space, hidden_dim=hidden_dim, net=net,
+    q = QnetM(env_obs_space, env_action_space, hidden_dim=hidden_dim, net=net, agg=agg,
         agent_num=agent_num, nonlin=nonlin).to(device)
-    q_target = QnetM(env_obs_space, env_action_space, hidden_dim=hidden_dim, net=net,
+    q_target = QnetM(env_obs_space, env_action_space, hidden_dim=hidden_dim, net=net, agg=agg,
         agent_num=agent_num, nonlin=nonlin).to(device)
     q_target.load_state_dict(q.state_dict())
     
@@ -46,8 +46,10 @@ def train_dqn(env, net, gamma=0.98, batch_size=5000, capacity=100000,
     total_reward_list = []
     ave_kill_num_list = []
     ave_survive_num_list = []
+    episode_noisy_attn_means_list = []
 
     writer = SummaryWriter(tensorboard_data)
+    count = 0
 
     for epoch in range(epoch_num):
         print('epoch %d training starts' % epoch)
@@ -69,13 +71,16 @@ def train_dqn(env, net, gamma=0.98, batch_size=5000, capacity=100000,
         total_kill_num = 0
         total_survive_num = 0
         total_reward = 0
+        episode_noisy_attn_means = []
  
         for test_episode in range(episodes_per_test):
-            statistic_var = exec_(env, q_target, 0.01, opp, device, False)
+            statistic_var = exec_(env, q_target, 0.01, opp, device, agent_num, False)
             print('test ... epoch %d episode %d' % (epoch, test_episode))
             total_reward += statistic_var[0]
             total_kill_num += statistic_var[1]
             total_survive_num += statistic_var[2]
+            if statistic_var[6]:
+                episode_noisy_attn_means.append(np.mean(statistic_var[6]))
         
         epoch_total_reward = total_reward / episodes_per_test
         epoch_total_kill_num = total_kill_num / episodes_per_test
@@ -83,6 +88,17 @@ def train_dqn(env, net, gamma=0.98, batch_size=5000, capacity=100000,
         print('epoch %d | total reward for group2: %0.2f | total kill num: %0.2f | total survive num: %0.2f' % (epoch, epoch_total_reward, epoch_total_kill_num, epoch_total_survive_num))
         writer.add_scalar('train/total_reward_for_group2', epoch_total_reward, epoch)
         writer.add_scalar('train/kill_num_for_group2', epoch_total_kill_num, epoch)
+        writer.add_scalar('train/survive_num_for_group2', epoch_total_survive_num, epoch)
+
+        if episode_noisy_attn_means:
+            epoch_noisy_attn_means = np.mean(episode_noisy_attn_means)
+            # count += 1
+        else:
+            epoch_noisy_attn_means = 0.0
+
+        writer.add_scalar('train/noisy_attn_means_for_group2', epoch_noisy_attn_means, epoch)
+        print('epoch {} | noisy attn: {}'.format(epoch, epoch_noisy_attn_means))
+        episode_noisy_attn_means_list.append(epoch_noisy_attn_means)
 
         total_reward_list.append(epoch_total_reward)
         ave_kill_num_list.append(epoch_total_kill_num)
@@ -100,5 +116,6 @@ def train_dqn(env, net, gamma=0.98, batch_size=5000, capacity=100000,
         data_dict[index + 'total_reward'] = total_reward_list
         data_dict[index + 'kill_num'] = ave_kill_num_list
         data_dict[index + 'survive_num'] = ave_survive_num_list
+        data_dict[index + 'noisy_attn'] = episode_noisy_attn_means_list
         dp.get_csv(csv_url + 'res.csv', data_dict)
         print('csv is saved.')

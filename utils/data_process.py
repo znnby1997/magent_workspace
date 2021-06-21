@@ -35,6 +35,7 @@ def get_curve(path_url, model_dict: dict, y_label='total_reward', save_url='base
             if not os.path.exists(seed_url):
                 continue
             seed_data = pd.read_csv(seed_url)
+
             seed_data = seed_data['seed(' + str(i) + ')' + y_label].values  # type: np.ndarray
             if seed_data.shape[0] > epoch_num:
                 seed_data = seed_data[0:epoch_num]

@@ -32,7 +32,7 @@ def ppo_one_td_loss(model, traj, gamma, entropy_coef, lmbda, eps_clip, device):
     s, a, r, s_prime, done_mask, prob_a = traj
 
     td_target = r + gamma * model.v(s_prime)[0] * (1 - done_mask)
-    delta = (td_target - model.v(s)[0]).detach().cpu().numpy()
+    delta = (td_target - model.v(s)[0]).detach().cpu().numpy() # delta_t = r + (1 - d_t+n) * gamma * V(s_t+n+1) - V(s_t+n)
 
     advantage_lst = []
     advantage = 0.0
@@ -56,4 +56,6 @@ def ppo_one_td_loss(model, traj, gamma, entropy_coef, lmbda, eps_clip, device):
     entropy_loss = entropy * entropy_coef
 
     return actor_loss, critic_loss, entropy_loss
+
+# def meta_policy_loss(model, )
     

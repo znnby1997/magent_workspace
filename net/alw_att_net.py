@@ -8,7 +8,7 @@ class AlwAttNet(nn.Module):
         super(AlwAttNet, self).__init__()
         self.agent_num = agent_num
         self.att_weight = None
-        self.nonlin = nonlin
+        self.nonlin = 'softmax'
 
         # agent level attention
         # self info: 36bits  opp info: 28bits  partner info: 28bits noisy info: 28bits

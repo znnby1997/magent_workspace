@@ -31,7 +31,7 @@ def train_a2c(env, net, gamma=0.98, lr=1e-4, hidden_dim=32,
     agent_num=20, opp_policy=None, model_save_url='../../data/a2c/model/',
     epoch_num=1000, test_num=20, train_rate=20,  tensorboard_data='../../data/a2c/log/data_info_', data_buffer_limit=5000,
     save_data=True, csv_url='../../data/a2c/csv/', seed_flag=1, nonlin='softmax',
-    entr_w=0.02, print_log=False, device=None):
+    entr_w=0.02, print_log=False, device=None, agg='v1'):
 
     env_action_space = env.action_space.n
     env_obs_space = env.observation_space.shape[0]
@@ -39,7 +39,7 @@ def train_a2c(env, net, gamma=0.98, lr=1e-4, hidden_dim=32,
     assert opp_policy != '', 'opp policy cannot be empty'
     opp = torch.load(opp_policy)
     
-    agent = ActorCritic(obs_dim=env_obs_space, n_actions=env_action_space, hidden_dim=hidden_dim, net=net,
+    agent = ActorCritic(obs_dim=env_obs_space, n_actions=env_action_space, hidden_dim=hidden_dim, net=net, agg=agg,
                 agent_num=agent_num, nonlin=nonlin).to(device)
 
     data_buffer = OPSimpleReplayBuffer(data_buffer_limit, device)

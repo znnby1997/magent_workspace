@@ -6,10 +6,10 @@ import torch.nn.functional as F
 
 
 class QnetM(nn.Module):
-    def __init__(self, obs_dim, n_actions, hidden_dim, net, agent_num, nonlin):
+    def __init__(self, obs_dim, n_actions, hidden_dim, net, agent_num, agg, nonlin):
         super(QnetM, self).__init__()
         
-        self.e = net(obs_dim, n_actions, hidden_dim, agent_num=agent_num, nonlin=nonlin)
+        self.e = net(obs_dim, n_actions, hidden_dim, agg=agg, agent_num=agent_num, nonlin=nonlin)
 
         self.n_actions = n_actions
 

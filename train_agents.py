@@ -27,7 +27,7 @@ if __name__ == "__main__":
         opt, exclude_lst=[
             'gpu_id', 'threads_num', 'seed', 'root_url', 'max_step', 'episode_num', 'print_rate', 'opp_policy',
             'episodes_per_epoch', 'episodes_per_test', 'epoch_num', 'save_data', 'print_log', 'agent_num', 'map_size'
-            'noisy_num'
+            'noisy_num', 'e_coef', 'lmbda', 'eps_clip', 'k_epoch'
         ], seed=opt.seed
     )
 
@@ -51,10 +51,6 @@ if __name__ == "__main__":
     set_seed(opt.seed)
 
     model_tag = opt.model_tag
-    if '_' in opt.net:
-        net_type, nonlin = opt.net.split('_')
-    else:
-        net_type, nonlin = opt.net, ''
 
     if model_tag == 'opp':
         env = MagentEnv(
@@ -92,13 +88,12 @@ if __name__ == "__main__":
 
         train_dqn(
             env=env,
-            net=net_cfg[net_type],
+            net=net_cfg[opt.net],
             gamma=opt.gamma, 
             batch_size=opt.batch_size, 
             capacity=opt.capacity, 
             lr=opt.lr, 
             hidden_dim=opt.hidden_dim,
-            nonlin=nonlin,
             agent_num=opt.agent_num, 
             opp_policy=opt.opp_policy, 
             model_save_url=model_url,
@@ -111,7 +106,8 @@ if __name__ == "__main__":
             seed_flag=opt.seed, 
             update_model_rate=opt.update_rate,
             print_log=opt.print_log,
-            device=device
+            device=device,
+            agg=opt.agg_version
         )
     elif model_tag == 'a2c':
         env = MagentEnv(
@@ -125,7 +121,7 @@ if __name__ == "__main__":
 
         train_a2c(
             env=env, 
-            net=net_cfg[net_type], 
+            net=net_cfg[opt.net], 
             gamma=opt.gamma, 
             lr=opt.lr, 
             hidden_dim=opt.hidden_dim,
@@ -140,10 +136,10 @@ if __name__ == "__main__":
             save_data=opt.save_data,
             csv_url=csv_url,
             seed_flag=opt.seed,
-            nonlin=nonlin,
             entr_w=opt.e_coef,
             print_log=opt.print_log,
-            device=device
+            device=device,
+            agg=opt.agg_version
         )
     elif model_tag == 'ppo':
         env = MagentEnv(
@@ -157,7 +153,7 @@ if __name__ == "__main__":
 
         train_ppo(
             env=env, 
-            net=net_cfg[net_type],
+            net=net_cfg[opt.net],
             gamma=opt.gamma, 
             lr=opt.lr, 
             hidden_dim=opt.hidden_dim, 
@@ -172,13 +168,13 @@ if __name__ == "__main__":
             save_data=opt.save_data, 
             csv_url=csv_url, 
             seed_flag=opt.seed, 
-            nonlin=nonlin,
             lmbda=opt.lmbda, 
             eps_clip=opt.eps_clip, 
             entropy_coef=opt.e_coef,
             k_epoch=opt.k_epoch,
             print_log=opt.print_log,
-            device=device
+            device=device,
+            agg=opt.agg_version
         )
     else:
         raise argparse.ArgumentTypeError('argument model_tag is unknown')

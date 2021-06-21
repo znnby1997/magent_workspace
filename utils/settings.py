@@ -32,4 +32,14 @@ def create_dir(dir_url):
     if not os.path.exists(dir_url):
         os.makedirs(dir_url)
 
+def get_noisy_from_obs(single_obs, agents_num):
+    """obs: 36 self_info, 28 * (3 * agents-1) other_info
+    """
+    other_info = single_obs[36:]
+    info_lst = np.vstack(np.split(other_info, 3*agents_num-1, 0)) # nums, 28
+    idx = info_lst[:, 1] # nums
+    noisy_idx = np.argwhere(idx==2.) # 三种情况:如果为空,shape=(0, 1);如果只有一个,shape=(1,1);如果有多个,shape=(n,1)
+    return noisy_idx
+
+
 
